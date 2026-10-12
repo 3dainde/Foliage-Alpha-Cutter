@@ -52,30 +52,38 @@ Le panneau est structuré en **5 sections numérotées** correspondant au workfl
 
 ---
 
-## 3. Étape 1 : Choix du Phénotype & Textures
+## 3. Étape 1 : Choix de la Famille, Variété & Textures
 
-Cette section permet de sélectionner l'espèce botanique et de charger automatiquement la texture source.
+L'add-on intègre désormais une architecture multi-familles botaniques développable et extensible :
 
-![Comparaison des Phénotypes](images/phenotypes_comparison.png)
-
-### Les 3 Phénotypes Botaniques Intégrés :
+### 1. 🌿 Famille Cannabis
 - **🌱 Sativa (9 folioles)** : Limbe élancé, folioles très fines, longues et effilées. Idéal pour les variétés tropicales.
 - **🌿 Indica (7 folioles)** : Folioles larges, trapues et couvrantes, se chevauchant légèrement.
 - **🌾 Ruderalis (5 folioles)** : Silhouette compacte, folioles robustes et courtes.
 
-### Configuration des Chemins d'Images :
-- Vous pouvez définir vos propres images PNG transparentes dans les champs `🌱 Sativa`, `🌿 Indica`, et `🌾 Ruderalis`.
-- Si les chemins sont laissés par défaut ou pointent vers le dossier `textures/`, l'add-on charge automatiquement les textures fournies dans le dépôt.
+### 2. 🍅 Potager & Jardin (Ex: Solanacées / Tomates)
+- **🍃 Feuillage régulier** : Feuilles classiques profondément découpées.
+- **🥔 Pomme de terre (*Potato Leaf*)** : Folioles larges, ovales et entières sans dentelures profondes.
+- **🌿 Rugueux / Nain (*Rugose Leaf*)** : Feuilles gaufrées, épaisses et très nervurées.
 
-### Génération :
-Cliquez sur le gros bouton vert :
+### 3. 🌳 Arbres & 🪴 Plantes d'intérieur
+- **🍂 Chêne & 🍁 Érable** : Morphologies de feuilles d'arbres caducs.
+- **🪴 Monstera & 🌿 Ficus** : Feuilles de plantes d'ornement et d'intérieur.
+- **📁 Personnalisée / Import Libre** : Permet d'importer n'importe quelle texture PNG avec canal alpha.
+
+### Configuration des Chemins d'Images (Inputs Dépliables) :
+- Cliquez sur `📁 Déplier Chemins d'Images` pour spécifier vos propres fichiers ou textures personnalisées.
+- L'add-on résout automatiquement les fichiers locaux, les dossiers d'installation de Blender et les chemins relatifs.
+
+### Génération & Garantie Anti-Rétrécissement :
+Cliquez sur le bouton principal :
 ```
-[ 🌿 Générer la Feuille 3D (Image + Vertex) ]
+[ 🌱 Générer la Feuille 3D (Image + Vertex) ]
 ```
 L'add-on :
 1. Charge l'image en mémoire.
-2. Analyse les pixels du canal alpha.
-3. Découpe le maillage 3D avec les proportions exactes ($W \times H$).
+2. Analyse les pixels du canal alpha avec détection adaptative.
+3. Découpe le maillage 3D avec les proportions exactes ($W \times H$) calées sur la **Hauteur Référence (m)** (0.75m par défaut), **empêchant tout rétrécissement cumulatif lors des ré-applications**.
 4. Construit l'arbre de shading dynamique et assigne le matériau.
 
 ---
@@ -90,6 +98,7 @@ Cette section contrôle la transformation de l'image 2D en maillage 3D triangul�
 
 | Paramètre | Description | Recommandation |
 | :--- | :--- | :--- |
+| **Hauteur Référence (m)** | Échelle canonique standardisée en mètres préservée à chaque recalcul. | **0.75 m** |
 | **Adaptation Pixels Auto** | Calcule automatiquement la surface réelle de la feuille en pixels et ajuste la résolution pour éviter la surcharge de sommets sur les petites variétés comme Ruderalis. | **Coché** (Recommandé) |
 | **Marge Silhouette (px)** | Dilatation du masque de découpe en pixels. Évite de rogner le limbe tout en préservant les échancrures étroites entre les folioles. | **2 à 4 px** |
 | **Tolérance Contour (px)** | Tolérance de l'algorithme Ramer-Douglas-Peucker. Plus la valeur est basse, plus les dents de scie du limbe sont fidèles. | **3.5 à 5.0 px** |
@@ -102,7 +111,7 @@ Si vous modifiez l'un des curseurs ci-dessus, cliquez sur :
 ```
 [ ✂️ Ré-appliquer Découpe & Topologie ]
 ```
-Le maillage de l'objet sélectionné sera instantanément recalculé avec les nouveaux réglages sans réinitialiser le shader.
+Le maillage de l'objet sélectionné sera instantanément recalculé avec les nouveaux réglages sans altérer son échelle ni réinitialiser le shader.
 
 ---
 
@@ -121,23 +130,35 @@ Le shader intègre la gestion de variétés botaniques spécifiques avec un resp
 - **Teinte sombre violacée** réaliste (rouge-violacé profond).
 - **Préservation des nervures claires** : les nervures principales et secondaires conservent un vert tendre / jaune pâle contrasté, comme sur les vraies plantes.
 
-### 3. ❄️ Blanche / Frost (Trichomes)
-- Simule la cristallisation des têtes et feuilles à résine abondante (type *White Widow*).
-- **Dégradé anatomique** : la résine blanche givrée est concentrée vers l'arrière / la base de la feuille (zone d'attache au calice) et s'estompe vers les pointes avec un bruit organique fin.
+### 3. ❄️ Blanche / Frost (Trichomes Répartis sur la Base)
+- Simule la cristallisation des têtes et feuilles résineuses (type *White Widow*).
+- **Distribution anatomique stricte** :
+  - **Zone active basse ($0.0 \rightarrow 0.40$)** : Les trichomes sont strictement confinés au tiers inférieur de la feuille, proche de l'attache florale ($Y-$).
+  - **Densité maximale ($0.0 \rightarrow 0.28$)** : Givre dense et micro-détaillé.
+  - **Zone de transition / Fondu ($0.28 \rightarrow 0.40$)** : Fondu progressif (*Smoothstep*) dissolvant les cristaux.
+  - **Zone haute ($0.40 \rightarrow 1.0$)** : Strictement $0$ trichome sur les pointes supérieures et le haut du limbe.
+- **Triggers et curseurs dédiés** :
+  - `Force Visuelle` : intensité globale du givre (0.0 à 2.5).
+  - `Début Fade (Y)` : hauteur relative où commence le fondu (défaut 0.28).
+  - `Fin Fade / Limite (Y)` : hauteur maximale absolue des trichomes (défaut 0.40).
+  - `Accentuation Bords` : renforcement des cristaux le long des crénelures dans la zone active.
 
 ### 4. 🎨 Personnalisée
 - Permet de choisir une couleur arbitraire avec une pipette ou un sélecteur RGBA tout en conservant le mélange d'ombrage.
-
-Le curseur **Intensité Variété** (0.0 à 1.0) ajuste le dosage de pigmentation selon vos besoins artistiques.
 
 ---
 
 ## 6. Étape 4 : Trigger Dynamique de Sénescence (Cycle de Vie)
 
-Cette fonctionnalité phare permet de simuler la maturation et le vieillissement de la feuille en temps réel via un curseur unique.
+Cette fonctionnalité permet de simuler la maturation et le vieillissement de la feuille en temps réel de manière **100% symétrique et homogène sur toutes les folioles** (*partout sur la feuille*) :
 
 ```
-Trigger Âge : [============== 0.75 ==============]
+Trigger Âge : [============== 0.65 ==============]
+```
+
+- **Toutes les pointes de toutes les folioles** (supérieures, latérales, inférieures) reçoivent une nécrose apicale brûlée (Canal R).
+- **Toutes les marges dentelées** brunissent de façon équilibrée (Canal G).
+- **Chlorose dorée et taches de rouille** se diffusent harmonieusement sur toute la feuille.
 ```
 
 ![Variété Blanche et Sénescence](images/preview_white.png)

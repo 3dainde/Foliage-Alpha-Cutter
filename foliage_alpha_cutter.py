@@ -1,10 +1,10 @@
 bl_info = {
     "name": "Foliage Alpha Silhouette Cutter & Dynamic PBR Baker",
-    "author": "Antigravity",
-    "version": (1, 5, 0),
+    "author": "Antigravity & 3dainde",
+    "version": (1, 6, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Onglet 'Foliage Cut'",
-    "description": "Générateur multi-phénotypes (Sativa, Indica, Ruderalis) avec découpe alpha automatique, Unsubdivide, triangles Delaunay, vertex colors vent UE, shader dynamique (Trigger Âge, Variétés Violette sombre et Blanche givrée) et Bake PBR.",
+    "description": "Générateur multi-familles végétales (Cannabis, Potager/Tomates, Arbres, Intérieur) avec découpe silhouette alpha adaptative, Unsubdivide/triangles Delaunay, courbure 3D, vertex colors vent UE5, shader dynamique (Trigger Âge Y+ vers Y-, Variétés Violette et Blanche trichomes Y- vers Y+) et Bake PBR.",
     "category": "Mesh",
 }
 
@@ -14,6 +14,10 @@ import numpy as np
 import math
 import os
 from mathutils import Vector
+
+# ==============================================================================
+# 1. OUTILS UTILITAIRES & RÉCUPÉRATION DES TEXTURES
+# ==============================================================================
 
 def get_image_alpha_from_object(obj):
     """Récupère l'image et sa carte alpha depuis le matériau de l'objet."""
@@ -31,7 +35,31 @@ def get_image_alpha_from_object(obj):
                 return img, px[:, :, 3]
     return None, None
 
-def get_source_diffuse_image(obj):
+def get_addon_base_dir():
+    """
+    Détermine de manière robuste le répertoire racine de l'add-on.
+    Gère le cas critique où le script est exécuté depuis le bloc-texte interne d'un fichier .blend,
+    évitant l'erreur de chemin 'C:\\...\\File.blend\\textures'.
+    """
+    if "__file__" in globals() and __file__:
+        cand = os.path.abspath(__file__)
+        while cand and (not os.path.isdir(cand) or cand.lower().endswith(".blend")):
+            cand = os.path.dirname(cand)
+        if cand and os.path.exists(os.path.join(cand, "textures")):
+            return cand
+
+    known_dirs = [
+        r"C:\Users\authi\AppData\Roaming\Blender Foundation\Blender\5.0\scripts\addons",
+        r"C:\Users\authi\.gemini\antigravity\scratch\Foliage-Alpha-Cutter",
+        r"C:\Users\authi\Desktop\Textures_PBR_Chanvre",
+        r"C:\Users\authi\Desktop",
+    ]
+    for kd in known_dirs:
+        if os.path.exists(os.path.join(kd, "textures")) or os.path.exists(kd):
+            return kd
+    return os.path.expanduser("~")
+
+def get_source_diffuse_image(obj=None):
     """Récupère la meilleure image source pour le bake PBR."""
     if obj and obj.data and obj.data.materials:
         mat = obj.data.materials[0]
@@ -44,18 +72,19 @@ def get_source_diffuse_image(obj):
                         
     for img in bpy.data.images:
         name_l = img.name.lower()
-        if any(k in name_l for k in ["sativa", "indica", "ruderalis", "leaf_transparent"]):
+        if any(k in name_l for k in ["sativa", "indica", "ruderalis", "regulier", "pomme", "rugueux", "chene", "erable", "monstera", "leaf"]):
             if "mask" not in name_l and "vein" not in name_l and "rough" not in name_l:
                 return img
 
-    addon_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else ""
+    addon_dir = get_addon_base_dir()
     for fallback in [
-        os.path.join(addon_dir, "textures", "Sativa.png"),
-        os.path.join(addon_dir, "textures", "Indica.png"),
-        os.path.join(addon_dir, "textures", "Ruderalis.png"),
+        os.path.join(addon_dir, "textures", "Sativa.png") if addon_dir else "",
+        os.path.join(addon_dir, "textures", "Feuillage_Regulier.png") if addon_dir else "",
+        os.path.join(addon_dir, "textures", "Indica.png") if addon_dir else "",
+        os.path.join(addon_dir, "textures", "Ruderalis.png") if addon_dir else "",
+        r"C:\Users\authi\AppData\Roaming\Blender Foundation\Blender\5.0\scripts\addons\textures\Sativa.png",
+        r"C:\Users\authi\AppData\Roaming\Blender Foundation\Blender\5.0\scripts\addons\textures\Feuillage_Regulier.png",
         r"C:\Users\authi\Downloads\Sativa.png",
-        r"C:\Users\authi\Downloads\Indica.png",
-        r"C:\Users\authi\Downloads\Ruderalis.png",
         r"C:\Users\authi\Desktop\leaf_transparent.png"
     ]:
         if fallback and os.path.exists(fallback):
@@ -68,7 +97,14 @@ def get_source_diffuse_image(obj):
 def save_array_as_image(name, arr_rgba, filepath):
     """Sauvegarde un tableau numpy RGBA [0.0, 1.0] en image PNG via l'API Blender."""
     h, w, _ = arr_rgba.shape
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    dir_path = os.path.dirname(filepath)
+    if dir_path:
+        try:
+            os.makedirs(dir_path, exist_ok=True)
+        except Exception:
+            fallback_dir = r"C:\Users\authi\Desktop\Textures_PBR_Chanvre"
+            os.makedirs(fallback_dir, exist_ok=True)
+            filepath = os.path.join(fallback_dir, os.path.basename(filepath))
     
     existing = bpy.data.images.get(name)
     if existing:
@@ -82,12 +118,29 @@ def save_array_as_image(name, arr_rgba, filepath):
     img.save()
     return img
 
-def ensure_masks_and_textures_for_image(src_img, type_name="Sativa", out_dir=r"C:\Users\authi\Desktop\Textures_PBR_Chanvre"):
+def ensure_masks_and_textures_for_image(src_img, type_name="Sativa", out_dir=None):
     """
     Génère automatiquement les cartes TipMask, Veins et Roughness adaptées
     à la silhouette et aux nervures de l'image de feuille sélectionnée.
+    
+    SYMÉTRIE ET RÉPARTITION HOMOGÈNE :
+    - Centre de jonction strict au milieu de la silhouette : center_x = (x_min + x_max) / 2.
+    - Canal R (Tip Burn) : Pointes de TOUTES les folioles (100% symétrique gauche/droite).
+    - Canal G (Margin Burn) : Marges crénelées de toutes les folioles.
+    - Canal B (Gradient radial) : 0.0 à la base (pétiole / fleur) -> 1.0 aux pointes.
     """
-    os.makedirs(out_dir, exist_ok=True)
+    if out_dir is None:
+        addon_base = get_addon_base_dir()
+        if addon_base and os.path.isdir(os.path.join(addon_base, "textures")):
+            out_dir = os.path.join(addon_base, "textures", "generated_masks")
+        else:
+            out_dir = r"C:\Users\authi\Desktop\Textures_PBR_Chanvre"
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+    except Exception:
+        out_dir = r"C:\Users\authi\Desktop\Textures_PBR_Chanvre"
+        os.makedirs(out_dir, exist_ok=True)
+
     mask_path = os.path.join(out_dir, f"T_{type_name}_TipMask.png")
     veins_path = os.path.join(out_dir, f"T_{type_name}_Veins.png")
     rough_path = os.path.join(out_dir, f"T_{type_name}_Roughness.png")
@@ -95,7 +148,7 @@ def ensure_masks_and_textures_for_image(src_img, type_name="Sativa", out_dir=r"C
     w, h = src_img.size[0], src_img.size[1]
     px = np.array(src_img.pixels).reshape((h, w, 4))
     r, g, b, alpha = px[:, :, 0], px[:, :, 1], px[:, :, 2], px[:, :, 3]
-    bin_alpha = (alpha > 0.25).astype(float)
+    bin_alpha = (alpha > 0.18).astype(float)
 
     # Carte de distance au fond
     dist_to_bg = np.zeros_like(bin_alpha)
@@ -106,29 +159,33 @@ def ensure_masks_and_textures_for_image(src_img, type_name="Sativa", out_dir=r"C
         curr = eroded
     dist_to_bg += curr * 40
 
-    # Localisation du pétiole et du nœud de jonction des folioles
-    y_idxs, x_idxs = np.where(alpha > 0.25)
+    # 0. Localisation du centre de jonction foliaire (Symétrie stricte gauche/droite)
+    y_idxs, x_idxs = np.where(bin_alpha > 0.5)
     if len(y_idxs) == 0:
         return None, None, None
+    center_x = (x_idxs.min() + x_idxs.max()) / 2.0
     y_min_leaf = y_idxs.min()
     y_max_leaf = y_idxs.max()
-    petiole_x = x_idxs[y_idxs == y_min_leaf].mean()
-    junc_y = y_min_leaf + (y_max_leaf - y_min_leaf) * 0.16
-    junc_x = petiole_x
+    y_span = max(1.0, float(y_max_leaf - y_min_leaf))
+    junc_y = y_min_leaf + y_span * 0.12
 
     y_coords, x_coords = np.mgrid[0:h, 0:w]
-    rad_dist = np.sqrt(((x_coords - junc_x) / (w * 0.50))**2 + ((y_coords - junc_y) / (h * 0.75))**2)
+    dx = (x_coords - center_x) / (w * 0.48)
+    dy = (y_coords - junc_y) / (h * 0.72)
+    rad_dist = np.sqrt(dx**2 + dy**2)
 
-    # 1. Bouts brûlés (Canal R)
-    tip_outer = np.clip((rad_dist - 0.40) * 2.8, 0, 1) * np.clip((24.0 - dist_to_bg) / 18.0, 0, 1)
-    tip_very = np.clip((rad_dist - 0.55) * 3.5, 0, 1) * np.clip((14.0 - dist_to_bg) / 10.0, 0, 1)
-    tip_burn = np.clip(tip_outer * 0.65 + tip_very * 0.85, 0, 1) * alpha
+    # 1. Bouts brûlés (Canal R) : Toutes les pointes de toutes les folioles (100% symétrique)
+    tip_outer = np.clip((rad_dist - 0.42) * 2.4, 0.0, 1.0) * np.clip((22.0 - dist_to_bg) / 16.0, 0.0, 1.0)
+    tip_very = np.clip((rad_dist - 0.55) * 3.0, 0.0, 1.0) * np.clip((12.0 - dist_to_bg) / 9.0, 0.0, 1.0)
+    tip_burn = np.clip(tip_outer * 0.65 + tip_very * 0.85, 0.0, 1.0) * alpha
 
-    # 2. Marges crénelées brûlées (Canal G)
-    margin_burn = np.clip((12.0 - dist_to_bg) / 10.0, 0, 1) * np.clip((rad_dist - 0.20) * 2.0, 0, 1) * alpha
+    # 2. Marges crénelées brûlées (Canal G) : Marges de toutes les folioles (partout sur la feuille)
+    margin_edge = np.clip((14.0 - dist_to_bg) / 11.0, 0.0, 1.0)
+    margin_burn = np.clip(margin_edge * np.clip((rad_dist - 0.12) * 1.6, 0.0, 1.0), 0.0, 1.0) * alpha
 
-    # 3. Distance radiale normalisée (Canal B)
-    rad_norm = np.clip(rad_dist / 1.15, 0, 1) * alpha
+    # 3. Distance radiale normalisée (Canal B) : 0 à la base/fleur, 1 aux pointes
+    # Répartition équilibrée sur toute la feuille pour l'âge et les trichomes
+    rad_norm = np.clip(rad_dist / 1.15, 0.0, 1.0) * alpha
 
     mask_out = np.dstack([tip_burn, margin_burn, rad_norm, alpha])
     mask_img = save_array_as_image(f"T_{type_name}_TipMask", mask_out, mask_path)
@@ -142,24 +199,37 @@ def ensure_masks_and_textures_for_image(src_img, type_name="Sativa", out_dir=r"C
     veins_out = np.dstack([vein_combined, vein_combined, vein_combined, alpha])
     veins_img = save_array_as_image(f"T_{type_name}_Veins", veins_out, veins_path)
 
-    # 5. Rugosité mate veloutée (0.62 nervures -> 0.74 limbe végétal)
-    rough_base = np.clip(0.74 - vein_combined * 0.12, 0.60, 0.95) * alpha
+    # 5. Rugosité mate veloutée (0.62 nervures -> 0.76 limbe végétal)
+    rough_base = np.clip(0.76 - vein_combined * 0.14, 0.60, 0.95) * alpha
     rough_out = np.dstack([rough_base, rough_base, rough_base, alpha])
     rough_img = save_array_as_image(f"T_{type_name}_Roughness", rough_out, rough_path)
 
+    # Synchronisation miroir dans C:\Users\authi\Desktop\Textures_PBR_Chanvre si existant
+    desktop_dir = r"C:\Users\authi\Desktop\Textures_PBR_Chanvre"
+    if os.path.exists(desktop_dir) and os.path.abspath(out_dir).lower() != os.path.abspath(desktop_dir).lower():
+        try:
+            save_array_as_image(f"T_{type_name}_TipMask_Desk", mask_out, os.path.join(desktop_dir, f"T_{type_name}_TipMask.png"))
+            save_array_as_image(f"T_{type_name}_Veins_Desk", veins_out, os.path.join(desktop_dir, f"T_{type_name}_Veins.png"))
+            save_array_as_image(f"T_{type_name}_Rough_Desk", rough_out, os.path.join(desktop_dir, f"T_{type_name}_Roughness.png"))
+        except Exception:
+            pass
+
     return mask_img, veins_img, rough_img
+
+# ==============================================================================
+# 2. SHADER DYNAMIQUE PROCÉDURAL
+# ==============================================================================
 
 def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     """
     Construit le shader procédural temps réel dans le matériau avec :
     - Texture Base Color propre au type choisi
-    - Chlorose jaune dorée (base restant verte)
-    - Taches de rouille / marbrure entre les nervures
-    - Marges crénelées brûlées
-    - BOUTS DES FEUILLES NOIRS / MARRONS
-    - VARIÉTÉ SOMBRE VIOLACÉE AVEC NERVURES CLAIRES
-    - VARIÉTÉ BLANCHE GIVRÉE RÉPARTIE VERS L'ARRIÈRE (Sans bruit sur les pointes)
-    - SURFACE MATE BOTANIQUE (specular 0.15, coat 0.0)
+    - Chlorose jaune dorée orientée depuis la pointe Y+ vers la base Y-
+    - Taches de rouille / marbrure
+    - Bouts des feuilles brûlés / noirs en Y+
+    - Variété Violette sombre avec nervures claires
+    - Variété Blanche (neige / trichomes) orientée depuis la base / fleur Y- vers la pointe Y+
+    - Surface mate botanique (specular 0.15, coat 0.0)
     """
     if not mat:
         return None
@@ -187,7 +257,7 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     if 'Coat Weight' in bsdf.inputs:
         bsdf.inputs['Coat Weight'].default_value = 0.0
 
-    # Nettoyage préventif complet des anciens nœuds
+    # Nettoyage des anciens nœuds
     for n in list(nodes):
         if n.type not in ('BSDF_PRINCIPLED', 'OUTPUT_MATERIAL'):
             nodes.remove(n)
@@ -199,12 +269,12 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     tex_base_color = nodes.new('ShaderNodeTexImage')
     tex_base_color.name = 'Tex_BaseColor_Source'
     tex_base_color.image = base_color_img
-    tex_base_color.location = (bx - 1200, by)
+    tex_base_color.location = (bx - 1200, by + 100)
 
     # Génération des masques synchronisés pour ce type
     mask_img, veins_img, r_img = ensure_masks_and_textures_for_image(base_color_img, type_name)
 
-    # 2. Masque des pointes (TipMask)
+    # 2. Masque vertical (TipMask)
     tex_mask_node = nodes.new('ShaderNodeTexImage')
     tex_mask_node.name = 'Tex_TipMask'
     tex_mask_node.image = mask_img
@@ -224,7 +294,7 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     node_age.location = (bx - 1200, by + 350)
     node_age.outputs[0].default_value = 0.0
 
-    # 4. Chlorose jaune dorée
+    # 4. Chlorose jaune dorée (Pointe Y+ vers Y-)
     math_eff_age = nodes.new('ShaderNodeMath')
     math_eff_age.operation = 'MULTIPLY_ADD'
     math_eff_age.inputs[1].default_value = 0.70
@@ -300,8 +370,8 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     mix_purple_veins.data_type = 'RGBA'
     mix_purple_veins.blend_type = 'MIX'
     mix_purple_veins.location = (bx - 520, by - 120)
-    mix_purple_veins.inputs[6].default_value = (0.13, 0.08, 0.14, 1.0) # Limbe sombre violacé (aubergine / ardoise)
-    mix_purple_veins.inputs[7].default_value = (0.48, 0.52, 0.42, 1.0) # Nervures plus claires (vert sauge / crème)
+    mix_purple_veins.inputs[6].default_value = (0.13, 0.08, 0.14, 1.0) # Limbe sombre violacé
+    mix_purple_veins.inputs[7].default_value = (0.48, 0.52, 0.42, 1.0) # Nervures claires
     links.new(tex_veins.outputs['Color'], mix_purple_veins.inputs[0])
 
     mix_pheno = nodes.new('ShaderNodeMix')
@@ -313,48 +383,75 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     links.new(mix_chlor.outputs[2], mix_pheno.inputs[6])
     links.new(mix_purple_veins.outputs[2], mix_pheno.inputs[7])
 
-    # 7. Variété Blanche : Givre de trichomes doux concentré à l'arrière
+    # 7. Variété Blanche : Givre de trichomes micro-fins strictement concentré au bas de la feuille (0.0 à 0.40)
+    # Fondu smoothstep paramétrable entre fade_start (0.28) et fade_end (0.40)
     map_back_fade = nodes.new('ShaderNodeMapRange')
     map_back_fade.name = 'Map_Back_Fade'
     map_back_fade.interpolation_type = 'SMOOTHSTEP'
-    map_back_fade.inputs['From Min'].default_value = 0.02
-    map_back_fade.inputs['From Max'].default_value = 0.75
-    map_back_fade.inputs['To Min'].default_value = 1.0
-    map_back_fade.inputs['To Max'].default_value = 0.0
+    map_back_fade.inputs['From Min'].default_value = 0.28  # Début fade (100% en-dessous)
+    map_back_fade.inputs['From Max'].default_value = 0.40  # Fin fade / limite (0% au-dessus)
+    map_back_fade.inputs['To Min'].default_value = 1.0     # 1.0 à la base (Y- proche de la fleur)
+    map_back_fade.inputs['To Max'].default_value = 0.0     # 0.0 vers les pointes (Y+)
     map_back_fade.clamp = True
     map_back_fade.location = (bx - 360, by - 260)
     links.new(sep_mask.outputs['Blue'], map_back_fade.inputs['Value'])
 
+    # Modulation fine sur les dentelures de bordure
+    math_edge_mult = nodes.new('ShaderNodeMath')
+    math_edge_mult.name = 'Math_Edge_Trichomes_Mult'
+    math_edge_mult.operation = 'MULTIPLY'
+    math_edge_mult.inputs[1].default_value = 0.50
+    math_edge_mult.location = (bx - 360, by - 380)
+    links.new(sep_mask.outputs['Green'], math_edge_mult.inputs[0])
+
+    math_surf_factor = nodes.new('ShaderNodeMath')
+    math_surf_factor.name = 'Math_Surf_Factor'
+    math_surf_factor.operation = 'ADD'
+    math_surf_factor.inputs[0].default_value = 1.0
+    math_surf_factor.location = (bx - 200, by - 380)
+    links.new(math_edge_mult.outputs['Value'], math_surf_factor.inputs[1])
+
+    # Bruit micro-fin haute fréquence (Scale 140, Detail 6, Roughness 0.65)
     noise_frost = nodes.new('ShaderNodeTexNoise')
     noise_frost.name = 'Noise_Frost'
-    noise_frost.inputs['Scale'].default_value = 18.0
-    noise_frost.inputs['Detail'].default_value = 3.0
-    noise_frost.inputs['Roughness'].default_value = 0.50
+    noise_frost.inputs['Scale'].default_value = 140.0
+    noise_frost.inputs['Detail'].default_value = 6.0
+    noise_frost.inputs['Roughness'].default_value = 0.65
     noise_frost.location = (bx - 360, by - 120)
     links.new(tex_coord.outputs['UV'], noise_frost.inputs['Vector'])
 
     map_frost = nodes.new('ShaderNodeMapRange')
     map_frost.name = 'Map_Frost'
-    map_frost.inputs['From Min'].default_value = 0.45
-    map_frost.inputs['From Max'].default_value = 0.75
+    map_frost.inputs['From Min'].default_value = 0.52
+    map_frost.inputs['From Max'].default_value = 0.68
     map_frost.inputs['To Min'].default_value = 0.0
     map_frost.inputs['To Max'].default_value = 1.0
     map_frost.clamp = True
     map_frost.location = (bx - 200, by - 120)
     links.new(noise_frost.outputs['Fac'], map_frost.inputs['Value'])
 
+    # Combinaison bruit et morphologie de surface
+    mult_noise_surf = nodes.new('ShaderNodeMath')
+    mult_noise_surf.name = 'Mult_Noise_Surf'
+    mult_noise_surf.operation = 'MULTIPLY'
+    mult_noise_surf.location = (bx - 40, by - 120)
+    links.new(map_frost.outputs['Result'], mult_noise_surf.inputs[0])
+    links.new(math_surf_factor.outputs['Value'], mult_noise_surf.inputs[1])
+
+    # Application stricte du masque de hauteur Y (trichomes confinés à 0 - 0.40, fondu 0.28 - 0.40)
     mult_frost_back = nodes.new('ShaderNodeMath')
     mult_frost_back.name = 'Mult_Frost_Back'
     mult_frost_back.operation = 'MULTIPLY'
-    mult_frost_back.location = (bx - 60, by - 260)
-    links.new(map_frost.outputs['Result'], mult_frost_back.inputs[0])
+    mult_frost_back.location = (bx + 120, by - 120)
+    links.new(mult_noise_surf.outputs['Value'], mult_frost_back.inputs[0])
     links.new(map_back_fade.outputs['Result'], mult_frost_back.inputs[1])
 
+    # Multiplicateur de force visuelle et intensité temps réel
     math_frost_fac = nodes.new('ShaderNodeMath')
     math_frost_fac.name = 'Math_Frost_Fac'
     math_frost_fac.operation = 'MULTIPLY'
     math_frost_fac.inputs[1].default_value = 0.0
-    math_frost_fac.location = (bx - 60, by - 120)
+    math_frost_fac.location = (bx + 280, by - 120)
     links.new(mult_frost_back.outputs['Value'], math_frost_fac.inputs[0])
 
     mix_frost = nodes.new('ShaderNodeMix')
@@ -362,7 +459,7 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     mix_frost.data_type = 'RGBA'
     mix_frost.blend_type = 'MIX'
     mix_frost.location = (bx - 380, by + 100)
-    mix_frost.inputs[7].default_value = (0.90, 0.94, 0.88, 1.0)
+    mix_frost.inputs[7].default_value = (0.92, 0.95, 0.90, 1.0)
     links.new(mix_pheno.outputs[2], mix_frost.inputs[6])
     links.new(math_frost_fac.outputs['Value'], mix_frost.inputs[0])
 
@@ -376,7 +473,7 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     links.new(mix_frost.outputs[2], mix_rust.inputs[6])
     links.new(mult_rust.outputs['Value'], mix_rust.inputs[0])
 
-    # 9. Bords crénelés brûlés
+    # 9. Bords crénelés brûlés (Y+ vers Y-)
     map_age_margin = nodes.new('ShaderNodeMapRange')
     map_age_margin.inputs['From Min'].default_value = 0.25
     map_age_margin.inputs['From Max'].default_value = 1.00
@@ -399,7 +496,7 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     links.new(mix_rust.outputs[2], mix_margin.inputs[6])
     links.new(mult_margin.outputs['Value'], mix_margin.inputs[0])
 
-    # 10. Bouts des feuilles brûlés noirs / charbon
+    # 10. Bouts des feuilles brûlés noirs / charbon (Pointe Y+ vers Y-)
     map_age_tip = nodes.new('ShaderNodeMapRange')
     map_age_tip.inputs['From Min'].default_value = 0.20
     map_age_tip.inputs['From Max'].default_value = 0.85
@@ -426,7 +523,7 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     if tex_base_color:
         links.new(tex_base_color.outputs['Alpha'], bsdf.inputs['Alpha'])
 
-    # 11. Rugosité mate veloutée
+    # 11. Rugosité mate veloutée (0.76 de base)
     tex_roughness = nodes.new('ShaderNodeTexImage')
     tex_roughness.name = 'Tex_Roughness_Procedural'
     tex_roughness.image = r_img
@@ -450,178 +547,146 @@ def setup_dynamic_leaf_shader(mat, base_color_img=None, type_name="Sativa"):
     links.new(math_rough.outputs['Value'], clamp_rough.inputs[0])
     links.new(clamp_rough.outputs['Value'], bsdf.inputs['Roughness'])
 
-    # 12. Subsurface Scattering (SSS)
-    if 'Subsurface Weight' in bsdf.inputs:
-        math_sss = nodes.new('ShaderNodeMath')
-        math_sss.name = 'Math_SSS'
-        math_sss.operation = 'MULTIPLY_ADD'
-        math_sss.location = (bx - 20, by - 380)
-        math_sss.inputs[1].default_value = -0.20
-        math_sss.inputs[2].default_value = 0.25
-        links.new(node_age.outputs['Value'], math_sss.inputs[0])
-        links.new(math_sss.outputs['Value'], bsdf.inputs['Subsurface Weight'])
-
     return mat
 
+def update_dynamic_leaf_age(self, context):
+    """Callback temps réel : met à jour la valeur du nœud Leaf_Age_Trigger."""
+    for mat in bpy.data.materials:
+        if mat.node_tree:
+            node = mat.node_tree.nodes.get('Leaf_Age_Trigger')
+            if node:
+                node.outputs[0].default_value = self.leaf_age
+
 def update_dynamic_leaf_phenotype(self, context):
-    """Callback temps réel pour basculer la variété (Classique, Violette, Blanche, Custom)."""
-    pheno = self.leaf_phenotype
-    intensity = self.phenotype_intensity
-    custom_col = self.custom_variety_color
-
-    materials = []
-    obj = context.active_object
-    if obj and obj.data and hasattr(obj.data, "materials"):
-        materials.extend([m for m in obj.data.materials if m and m.node_tree])
-    mat_leaf = bpy.data.materials.get("Mat_Leaf_3D")
-    if mat_leaf and mat_leaf not in materials:
-        materials.append(mat_leaf)
-
-    for mat in materials:
-        nodes = mat.node_tree.nodes
-        links = mat.node_tree.links
-        mix_pheno = nodes.get("Mix_Phenotype")
-        math_frost = nodes.get("Math_Frost_Fac")
-
-        if not mix_pheno:
+    """Callback temps réel pour basculer entre Classique, Violette et Blanche et régler les paramètres de trichomes."""
+    for mat in bpy.data.materials:
+        if not mat.node_tree:
             continue
+        nodes = mat.node_tree.nodes
+        mix_pheno = nodes.get('Mix_Phenotype')
+        math_frost_fac = nodes.get('Math_Frost_Fac')
+        mix_purple_veins = nodes.get('Mix_Purple_Veins')
+        map_back_fade = nodes.get('Map_Back_Fade')
+        math_edge_mult = nodes.get('Math_Edge_Trichomes_Mult')
+
+        if not mix_pheno or not math_frost_fac:
+            continue
+
+        intensity = getattr(self, "phenotype_intensity", 1.0)
+        pheno = self.leaf_phenotype
 
         if pheno == 'CLASSIC':
             mix_pheno.inputs[0].default_value = 0.0
-            if math_frost: math_frost.inputs[1].default_value = 0.0
+            math_frost_fac.inputs[1].default_value = 0.0
+
         elif pheno == 'PURPLE':
-            mix_pheno.inputs[0].default_value = intensity * 0.92
-            mix_purple_veins = nodes.get("Mix_Purple_Veins")
+            mix_pheno.inputs[0].default_value = float(intensity)
+            math_frost_fac.inputs[1].default_value = 0.0
             if mix_purple_veins:
-                links.new(mix_purple_veins.outputs[2], mix_pheno.inputs[7])
-            else:
-                mix_pheno.inputs[7].default_value = (0.13, 0.08, 0.14, 1.0)
-            if math_frost: math_frost.inputs[1].default_value = 0.0
+                mix_purple_veins.inputs[6].default_value = (0.13, 0.08, 0.14, 1.0)
+                mix_purple_veins.inputs[7].default_value = (0.48, 0.52, 0.42, 1.0)
+
         elif pheno == 'WHITE':
-            for link in list(mix_pheno.inputs[7].links):
-                links.remove(link)
             mix_pheno.inputs[0].default_value = 0.0
-            if math_frost: math_frost.inputs[1].default_value = intensity * 0.75
+            t_strength = getattr(self, "trichome_strength", 1.0)
+            math_frost_fac.inputs[1].default_value = float(intensity * t_strength)
+
         elif pheno == 'CUSTOM':
-            for link in list(mix_pheno.inputs[7].links):
-                links.remove(link)
-            mix_pheno.inputs[7].default_value = custom_col
-            mix_pheno.inputs[0].default_value = intensity
-            if math_frost: math_frost.inputs[1].default_value = 0.0
+            mix_pheno.inputs[0].default_value = float(intensity)
+            math_frost_fac.inputs[1].default_value = 0.0
+            if mix_purple_veins:
+                c = getattr(self, "custom_variety_color", (0.35, 0.05, 0.40, 1.0))
+                mix_purple_veins.inputs[6].default_value = (c[0], c[1], c[2], 1.0)
+                mix_purple_veins.inputs[7].default_value = (0.6, 0.65, 0.55, 1.0)
 
-    if context.area:
-        context.area.tag_redraw()
+        # Mise à jour dynamique des limites de hauteur des trichomes (0.0 à 0.40, fade entre 0.28 et 0.40)
+        if map_back_fade:
+            f_start = getattr(self, "trichome_fade_start", 0.28)
+            f_end = getattr(self, "trichome_fade_end", 0.40)
+            map_back_fade.inputs['From Min'].default_value = float(f_start)
+            map_back_fade.inputs['From Max'].default_value = max(float(f_start) + 0.001, float(f_end))
 
-def update_dynamic_leaf_age(self, context):
-    """Callback appelée en temps réel lors du déplacement du curseur trigger âge."""
-    age_val = self.leaf_age
-    obj = context.active_object
-    materials = []
-    if obj and obj.data and hasattr(obj.data, "materials"):
-        materials.extend([m for m in obj.data.materials if m and m.node_tree])
-        
-    mat_leaf = bpy.data.materials.get("Mat_Leaf_3D")
-    if mat_leaf and mat_leaf not in materials:
-        materials.append(mat_leaf)
-        
-    for mat in materials:
-        node = mat.node_tree.nodes.get("Leaf_Age_Trigger")
-        if node:
-            node.outputs[0].default_value = age_val
-            
-    if context.area:
-        context.area.tag_redraw()
+        if math_edge_mult:
+            e_boost = getattr(self, "trichome_edge_boost", 0.50)
+            math_edge_mult.inputs[1].default_value = float(e_boost)
 
-def dilate_mask(bin_mask, margin_px):
-    """Dilatation propre sans repliement torique (non-wrapping) pour préserver les bords et les échancrures."""
-    if margin_px <= 0:
-        return bin_mask
-    h, w = bin_mask.shape
-    dilated = bin_mask.copy()
-    for dy in range(-margin_px, margin_px + 1):
-        for dx in range(-margin_px, margin_px + 1):
-            if dx*dx + dy*dy <= margin_px*margin_px:
-                src_y0 = max(0, -dy)
-                src_y1 = min(h, h - dy)
-                dst_y0 = max(0, dy)
-                dst_y1 = min(h, h + dy)
-                src_x0 = max(0, -dx)
-                src_x1 = min(w, w - dx)
-                dst_x0 = max(0, dx)
-                dst_x1 = min(w, w + dx)
-                dilated[dst_y0:dst_y1, dst_x0:dst_x1] |= bin_mask[src_y0:src_y1, src_x0:src_x1]
+# ==============================================================================
+# 3. EXTRACTION DU CONTOUR ALPHA & GÉOMÉTRIE ADAPTATIVE
+# ==============================================================================
+
+def dilate_mask(mask, radius):
+    """Dilatation morphologique orthogonale sans fermeture des échancrures."""
+    if radius <= 0:
+        return mask.copy()
+    h, w = mask.shape
+    dilated = mask.copy()
+    for r in range(1, radius + 1):
+        up = np.zeros_like(mask)
+        down = np.zeros_like(mask)
+        left = np.zeros_like(mask)
+        right = np.zeros_like(mask)
+        up[:-r, :] = dilated[r:, :]
+        down[r:, :] = dilated[:-r, :]
+        left[:, :-r] = dilated[:, r:]
+        right[:, r:] = dilated[:, :-r]
+        dilated = dilated | up | down | left | right
     return dilated
 
-def trace_contour_moore(bin_mask):
-    """Extrait le contour extérieur continu fermé du masque binaire via Moore-Neighbor tracing."""
-    h, w = bin_mask.shape
-    padded = np.pad(bin_mask, 1, mode='constant', constant_values=False)
-    visited = np.zeros_like(padded, dtype=bool)
-    y_idxs, x_idxs = np.where(padded)
+def trace_contour_moore(mask):
+    """Extraction du contour extérieur 8-connecté selon Moore-Neighbor."""
+    h, w = mask.shape
+    y_idxs, x_idxs = np.where(mask)
     if len(y_idxs) == 0:
         return []
-        
-    dirs = [
-        (-1, 0), (-1, -1), (0, -1), (1, -1),
-        (1, 0), (1, 1), (0, 1), (-1, 1)
-    ]
-    
-    best_contour = []
-    for start_y, start_x in zip(y_idxs, x_idxs):
-        if visited[start_y, start_x]:
-            continue
-        if all(padded[start_y + dy, start_x + dx] for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]):
-            continue
-            
-        contour = [(start_x - 1, start_y - 1)]
-        curr_x, curr_y = start_x, start_y
-        back_dir = 0
-        max_steps = w * h * 2
-        step_count = 0
-        
-        while step_count < max_steps:
-            step_count += 1
-            visited[curr_y, curr_x] = True
-            search_start = (back_dir + 1) % 8
-            found = False
-            for d in range(8):
-                idx = (search_start + d) % 8
-                nx = curr_x + dirs[idx][0]
-                ny = curr_y + dirs[idx][1]
-                if 0 <= ny < h + 2 and 0 <= nx < w + 2 and padded[ny, nx]:
-                    curr_x, curr_y = nx, ny
-                    contour.append((curr_x - 1, curr_y - 1))
-                    back_dir = (idx + 4) % 8
-                    found = True
-                    break
-            if not found or (curr_x == start_x and curr_y == start_y and len(contour) > 2):
+    start_y = y_idxs.min()
+    start_x = x_idxs[y_idxs == start_y].min()
+    start_pt = (int(start_x), int(start_y))
+
+    dirs = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)]
+    contour = [start_pt]
+    curr = start_pt
+    back_idx = 4
+
+    max_steps = 15000
+    for _ in range(max_steps):
+        found = False
+        scan_start = (back_idx + 1) % 8
+        for i in range(8):
+            d_idx = (scan_start + i) % 8
+            dx, dy = dirs[d_idx]
+            nx, ny = curr[0] + dx, curr[1] + dy
+            if 0 <= nx < w and 0 <= ny < h and mask[ny, nx]:
+                curr = (nx, ny)
+                contour.append(curr)
+                back_idx = (d_idx + 4) % 8
+                found = True
                 break
-                
-        if len(contour) > len(best_contour):
-            best_contour = contour
-            if len(best_contour) > 500:
-                break
-                
-    return best_contour
+        if not found or curr == start_pt:
+            break
+    return contour
 
 def rdp_simplify(points, epsilon):
-    """Simplification polygonale de Ramer-Douglas-Peucker (RDP)."""
+    """Simplification polygonale de Ramer-Douglas-Peucker."""
     if len(points) < 3:
         return points
+    p1 = np.array(points[0], dtype=float)
+    p2 = np.array(points[-1], dtype=float)
     pts = np.array(points, dtype=float)
-    line_start = pts[0]
-    line_end = pts[-1]
-    line_vec = line_end - line_start
+
+    line_vec = p2 - p1
     line_len = np.linalg.norm(line_vec)
     if line_len < 1e-6:
-        dists = np.linalg.norm(pts - line_start, axis=1)
+        dists = np.linalg.norm(pts - p1, axis=1)
     else:
-        line_unit = line_vec / line_len
-        proj = np.dot(pts - line_start, line_unit)
-        proj_pts = line_start + np.outer(proj, line_unit)
+        norm_line = line_vec / line_len
+        vec_from_p1 = pts - p1
+        proj = np.dot(vec_from_p1, norm_line)
+        proj_pts = p1 + np.outer(proj, norm_line)
         dists = np.linalg.norm(pts - proj_pts, axis=1)
-    max_idx = np.argmax(dists)
+
+    max_idx = int(np.argmax(dists))
     max_dist = dists[max_idx]
+
     if max_dist > epsilon:
         left = rdp_simplify(points[:max_idx + 1], epsilon)
         right = rdp_simplify(points[max_idx:], epsilon)
@@ -634,7 +699,10 @@ def generate_foliage_mesh(obj, alpha_map, dim_x=None, dim_y=None,
                           interior_subdiv=1, unsub_iters=0, triangulate=True,
                           v_fold=0.04, droop=0.05, bake_wind=True,
                           threshold=0.08, grid_res=24):
-    """Génère le maillage détouré au contour exact avec détection des pixels, courbure 3D et triangles réguliers."""
+    """
+    Génère le maillage détouré au contour exact avec détection des pixels, courbure 3D et triangles réguliers.
+    Garantit la préservation immuable des dimensions de référence sans aucun rétrécissement.
+    """
     h, w = alpha_map.shape
     bin_mask = (alpha_map > threshold)
     
@@ -646,11 +714,8 @@ def generate_foliage_mesh(obj, alpha_map, dim_x=None, dim_y=None,
     leaf_w = x_idxs.max() - x_idxs.min() + 1
     leaf_h = y_idxs.max() - y_idxs.min() + 1
 
-    # 1. Détection & Adaptation de la géométrie aux pixels réels de la feuille
+    # 1. Détection & Adaptation de la géométrie aux pixels réels
     if auto_adapt:
-        # Adaptation selon l'emprise réelle des pixels :
-        # Petite feuille (Ruderalis ~67k px) -> epsilon plus grand (moins de sommets, évite la sur-géométrie)
-        # Grande feuille (Indica ~217k px / Sativa ~114k px) -> résolution fine adaptée
         norm_size = leaf_area / 150000.0
         eff_eps = float(np.clip(contour_detail / (norm_size**0.35), 2.5, 8.0))
         if leaf_area < 80000:
@@ -661,25 +726,36 @@ def generate_foliage_mesh(obj, alpha_map, dim_x=None, dim_y=None,
         eff_eps = contour_detail
         eff_cuts = interior_subdiv
 
-    # 2. Dilatation serrée (marge protectrice sans combler les échancrures entre folioles)
+    # 2. Dilatation serrée
     dilated = dilate_mask(bin_mask, margin_px)
 
-    # 3. Traçage du contour & simplification polygonale
+    # 3. Traçage du contour & simplification
     raw_contour = trace_contour_moore(dilated)
     if len(raw_contour) < 3:
         raw_contour = [(x_idxs.min(), y_idxs.min()), (x_idxs.max(), y_idxs.min()),
                        (x_idxs.max(), y_idxs.max()), (x_idxs.min(), y_idxs.max())]
     simplified = rdp_simplify(raw_contour, eff_eps)
 
+    # 4. Résolution et sauvegarde immuable des dimensions (CORRECTION DU RÉTRÉCISSEMENT)
     if dim_y is None or dim_x is None:
-        if obj and obj.dimensions.y > 0.05:
-            dim_y = obj.dimensions.y
+        if obj and "leaf_ref_dim_y" in obj:
+            dim_y = float(obj["leaf_ref_dim_y"])
+            dim_x = float(obj.get("leaf_ref_dim_x", dim_y * (w / h)))
+        elif obj and obj.dimensions.y > 0.05:
+            # Calcul en inversant le ratio réel de couverture pour ne pas réduire le canevas
+            ratio_y = float(leaf_h) / float(h)
+            dim_y = obj.dimensions.y / max(0.1, ratio_y)
             dim_x = dim_y * (w / h)
         else:
             dim_y = 0.75
             dim_x = 0.75 * (w / h)
 
-    # 4. Tessellation 2D propre via Curve GLU native de Blender
+    # Stockage de la référence sur l'objet
+    if obj:
+        obj["leaf_ref_dim_y"] = float(dim_y)
+        obj["leaf_ref_dim_x"] = float(dim_x)
+
+    # 5. Tessellation 2D via Curve GLU
     curve_data = bpy.data.curves.new(name="Temp_Leaf_Contour", type='CURVE')
     curve_data.dimensions = '2D'
     curve_data.fill_mode = 'BOTH'
@@ -697,7 +773,7 @@ def generate_foliage_mesh(obj, alpha_map, dim_x=None, dim_y=None,
     bpy.data.objects.remove(temp_obj, do_unlink=True)
     bpy.data.curves.remove(curve_data)
 
-    # 5. Découpe interne équilibrée et triangulation Delaunay
+    # 6. Découpe interne équilibrée et triangulation Delaunay
     bm = bmesh.new()
     bm.from_mesh(mesh_from_curve)
 
@@ -708,7 +784,7 @@ def generate_foliage_mesh(obj, alpha_map, dim_x=None, dim_y=None,
         bmesh.ops.triangulate(bm, faces=bm.faces, quad_method='BEAUTY', ngon_method='BEAUTY')
         bmesh.ops.beautify_fill(bm, faces=bm.faces, edges=bm.edges, method='AREA')
 
-    # 6. Courbure 3D réaliste (pli en V sur la nervure centrale + courbure longitudinale)
+    # 7. Courbure 3D réaliste (pli en V et courbure longitudinale)
     uv_layer = bm.loops.layers.uv.verify()
     for vert in bm.verts:
         u = (vert.co.x / dim_x) + 0.5
@@ -736,7 +812,7 @@ def generate_foliage_mesh(obj, alpha_map, dim_x=None, dim_y=None,
     old_mesh = obj.data
     obj.data = new_mesh
 
-    # 7. Réduction de sommets (Vertex Reducer)
+    # 8. Réduction de sommets (Vertex Reducer)
     if unsub_iters > 0:
         mod_decim = obj.modifiers.new("Vertex_Reducer", 'DECIMATE')
         mod_decim.decimate_type = 'COLLAPSE'
@@ -744,7 +820,7 @@ def generate_foliage_mesh(obj, alpha_map, dim_x=None, dim_y=None,
         bpy.context.view_layer.objects.active = obj
         bpy.ops.object.modifier_apply(modifier='Vertex_Reducer')
 
-    # 8. Vertex Colors pour le vent Unreal Engine
+    # 9. Vertex Colors pour le vent Unreal Engine
     if bake_wind:
         col_attr = obj.data.color_attributes.new(name="WindWeight", type='BYTE_COLOR', domain='POINT')
         y_coords = [v.co.y for v in obj.data.vertices]
@@ -752,29 +828,37 @@ def generate_foliage_mesh(obj, alpha_map, dim_x=None, dim_y=None,
             y_min = min(y_coords)
             junc_y = y_min + (max(y_coords) - y_min) * 0.25
             for idx, v_vert in enumerate(obj.data.vertices):
-                x_val = v_vert.co.x
-                y_val = v_vert.co.y
-                dist = math.sqrt(x_val*x_val + (y_val - junc_y)**2)
-                if y_val < junc_y:
-                    weight = np.clip((y_val - y_min) / max(0.001, junc_y - y_min) * 0.20, 0.0, 0.20)
+                if v_vert.co.y <= junc_y:
+                    w_val = 0.0
                 else:
-                    weight = 0.20 + 0.80 * np.clip(dist / (dim_y * 0.65), 0.0, 1.0)
-                col_attr.data[idx].color = (float(weight), float(weight**2), 0.0, 1.0)
+                    w_val = float(np.clip((v_vert.co.y - junc_y) / (max(y_coords) - junc_y), 0.0, 1.0) ** 2)
+                col_attr.data[idx].color = (w_val, w_val, w_val, 1.0)
 
-    if mat and not obj.data.materials:
-        obj.data.materials.append(mat)
+    if mat:
+        if not obj.data.materials:
+            obj.data.materials.append(mat)
+        else:
+            obj.data.materials[0] = mat
+
     if old_mesh and old_mesh.users == 0:
         bpy.data.meshes.remove(old_mesh)
+
+# ==============================================================================
+# 4. MOTEUR DE BAKE TEXTURES PBR (UNREAL ENGINE)
+# ==============================================================================
 
 def bake_leaf_pbr(source_img, output_dir, age=0.0,
                   bake_col=True, bake_nm=True, bake_me=True,
                   bake_ao=True, bake_sss=True, bake_orm=True,
                   normal_strength=2.2):
-    """Génère les textures PBR avec le rendu exact (bouts noirs, chlorose, matité)."""
+    """
+    Génère les textures PBR avec le rendu exact (bouts noirs, chlorose, matité).
+    Alignement vertical corrigé de Y+ vers Y- pour l'âge.
+    """
     w, h = source_img.size[0], source_img.size[1]
     px = np.array(source_img.pixels).reshape((h, w, 4))
     r, g, b, alpha = px[:, :, 0], px[:, :, 1], px[:, :, 2], px[:, :, 3]
-    bin_alpha = (alpha > 0.4).astype(float)
+    bin_alpha = (alpha > 0.35).astype(float)
     
     saved_textures = {}
     age_clamp = float(np.clip(age, 0.0, 1.0))
@@ -788,24 +872,35 @@ def bake_leaf_pbr(source_img, output_dir, age=0.0,
         curr = eroded
     dist_to_bg += curr * 40
     
-    y_idxs, x_idxs = np.where(alpha > 0.3)
-    y_min_leaf = y_idxs.min() if len(y_idxs) > 0 else 0
-    y_max_leaf = y_idxs.max() if len(y_idxs) > 0 else h - 1
-    petiole_x = x_idxs[y_idxs == y_min_leaf].mean() if len(y_idxs) > 0 else 0.5 * w
-    junc_y = y_min_leaf + (y_max_leaf - y_min_leaf) * 0.16
-    junc_x = petiole_x
+    y_idxs, x_idxs = np.where(bin_alpha > 0.5)
+    if len(y_idxs) == 0:
+        center_x = w / 2.0
+        junc_y = 0.0
+    else:
+        center_x = (x_idxs.min() + x_idxs.max()) / 2.0
+        y_min_leaf = y_idxs.min()
+        y_max_leaf = y_idxs.max()
+        y_span = max(1.0, float(y_max_leaf - y_min_leaf))
+        junc_y = y_min_leaf + y_span * 0.12
 
     y_coords, x_coords = np.mgrid[0:h, 0:w]
-    rad_dist = np.sqrt(((x_coords - junc_x) / (w * 0.50))**2 + ((y_coords - junc_y) / (h * 0.75))**2)
-    
-    tip_outer = np.clip((rad_dist - 0.40) * 2.8, 0, 1) * np.clip((24.0 - dist_to_bg) / 18.0, 0, 1)
-    tip_very = np.clip((rad_dist - 0.55) * 3.5, 0, 1) * np.clip((14.0 - dist_to_bg) / 10.0, 0, 1)
-    tip_burn = np.clip(tip_outer * 0.65 + tip_very * 0.85, 0, 1) * alpha
-    margin_burn = np.clip((12.0 - dist_to_bg) / 10.0, 0, 1) * np.clip((rad_dist - 0.20) * 2.0, 0, 1) * alpha
+    dx = (x_coords - center_x) / (w * 0.48)
+    dy = (y_coords - junc_y) / (h * 0.72)
+    rad_dist = np.sqrt(dx**2 + dy**2)
+
+    # Bouts brûlés et marges (Toutes les pointes de toutes les folioles, 100% symétrique)
+    tip_outer = np.clip((rad_dist - 0.42) * 2.4, 0.0, 1.0) * np.clip((22.0 - dist_to_bg) / 16.0, 0.0, 1.0)
+    tip_very = np.clip((rad_dist - 0.55) * 3.0, 0.0, 1.0) * np.clip((12.0 - dist_to_bg) / 9.0, 0.0, 1.0)
+    tip_burn = np.clip(tip_outer * 0.65 + tip_very * 0.85, 0.0, 1.0) * alpha
+
+    margin_edge = np.clip((14.0 - dist_to_bg) / 11.0, 0.0, 1.0)
+    margin_burn = np.clip(margin_edge * np.clip((rad_dist - 0.12) * 1.6, 0.0, 1.0), 0.0, 1.0) * alpha
+
+    rad_norm = np.clip(rad_dist / 1.15, 0.0, 1.0) * alpha
 
     # 1. Base Color
     if bake_col:
-        eff_age = age_clamp * np.clip(0.30 + 0.70 * (rad_dist / 1.15), 0, 1)
+        eff_age = age_clamp * np.clip(0.30 + 0.70 * rad_norm, 0, 1)
         chlor_fac = np.clip((eff_age - 0.05) / 0.75, 0.0, 0.95)
         
         gold_r, gold_g, gold_b = 0.98, 0.82, 0.05
@@ -858,23 +953,16 @@ def bake_leaf_pbr(source_img, output_dir, age=0.0,
         norm_len = np.maximum(np.sqrt(nx*nx + ny*ny + nz*nz), 1e-6)
         nx /= norm_len; ny /= norm_len; nz /= norm_len
         
-        nm_r = np.where(alpha > 0.05, nx * 0.5 + 0.5, 0.5)
-        nm_g = np.where(alpha > 0.05, ny * 0.5 + 0.5, 0.5)
-        nm_b = np.where(alpha > 0.05, nz * 0.5 + 0.5, 1.0)
-        
+        nm_rgb = np.dstack([(nx * 0.5 + 0.5) * alpha, (ny * 0.5 + 0.5) * alpha, (nz * 0.5 + 0.5) * alpha, alpha])
         if bake_nm:
-            nm_out = np.dstack([nm_r, nm_g, nm_b, alpha])
             path_nm = os.path.join(output_dir, "T_Feuille_Normal.png")
-            saved_textures["Normal"] = save_array_as_image("T_Feuille_Normal", nm_out, path_nm)
+            saved_textures["Normal"] = save_array_as_image("T_Feuille_Normal", nm_rgb, path_nm)
 
-    # 3. Metallic & Roughness
-    vein_mask = np.clip((g - r) * 1.8, 0.0, 1.0)
-    rough_map = np.clip(0.74 - vein_mask * 0.12 + age_clamp * 0.20, 0.60, 0.95) * alpha
+    # 3. Roughness
+    veins_contrast = np.clip((lum - np.roll(lum, 1, 0)) * 3.5, 0.0, 1.0)
+    rough_base = np.clip(0.76 - veins_contrast * 0.14, 0.60, 0.95)
+    rough_map = np.clip(rough_base + age_clamp * 0.18, 0.70, 0.98) * alpha
     if bake_me:
-        me_out = np.dstack([np.zeros_like(r), np.zeros_like(r), np.zeros_like(r), alpha])
-        path_me = os.path.join(output_dir, "T_Feuille_Metallic.png")
-        saved_textures["Metallic"] = save_array_as_image("T_Feuille_Metallic", me_out, path_me)
-
         rough_out = np.dstack([rough_map, rough_map, rough_map, alpha])
         path_rough = os.path.join(output_dir, "T_Feuille_Roughness.png")
         saved_textures["Roughness"] = save_array_as_image("T_Feuille_Roughness", rough_out, path_rough)
@@ -905,62 +993,231 @@ def bake_leaf_pbr(source_img, output_dir, age=0.0,
 
     return saved_textures
 
+# ==============================================================================
+# 5. PROPRIÉTÉS & OPÉRATEURS BLENDER
+# ==============================================================================
+
+def get_active_leaf_info(props):
+    """
+    Retourne (nom_affiche, chemin_image, nom_fichier_defaut)
+    selon la famille végétale et la variété active, avec recherche de secours.
+    """
+    addon_dir = get_addon_base_dir()
+    tex_dir = os.path.join(addon_dir, "textures") if addon_dir and os.path.isdir(addon_dir) else ""
+    
+    fam = props.plant_family
+    if fam == 'CANNABIS':
+        sub = props.leaf_type_cannabis
+        if sub == 'SATIVA':
+            type_name = "Sativa"
+            user_path = props.path_sativa
+            def_name = "Sativa.png"
+        elif sub == 'INDICA':
+            type_name = "Indica"
+            user_path = props.path_indica
+            def_name = "Indica.png"
+        else:
+            type_name = "Ruderalis"
+            user_path = props.path_ruderalis
+            def_name = "Ruderalis.png"
+
+    elif fam == 'GARDEN':
+        sub = props.leaf_type_garden
+        if sub == 'REGULAR':
+            type_name = "Feuillage_Regulier"
+            user_path = props.path_garden_regular
+            def_name = "Feuillage_Regulier.png"
+        elif sub == 'POTATO':
+            type_name = "Feuillage_Pomme_De_Terre"
+            user_path = props.path_garden_potato
+            def_name = "Feuillage_Pomme_De_Terre.png"
+        else:
+            type_name = "Feuillage_Rugueux"
+            user_path = props.path_garden_rugose
+            def_name = "Feuillage_Rugueux.png"
+
+    elif fam == 'TREES':
+        sub = props.leaf_type_trees
+        if sub == 'OAK':
+            type_name = "Chene"
+            user_path = props.path_tree_oak
+            def_name = "Chene.png"
+        elif sub == 'MAPLE':
+            type_name = "Erable"
+            user_path = props.path_tree_maple
+            def_name = "Erable.png"
+        else:
+            type_name = "Arbre_Custom"
+            user_path = props.path_tree_custom
+            def_name = ""
+
+    elif fam == 'HOUSEPLANTS':
+        sub = props.leaf_type_houseplants
+        if sub == 'MONSTERA':
+            type_name = "Monstera"
+            user_path = props.path_house_monstera
+            def_name = "Monstera.png"
+        elif sub == 'FICUS':
+            type_name = "Ficus"
+            user_path = props.path_house_ficus
+            def_name = ""
+        else:
+            type_name = "Plante_Custom"
+            user_path = props.path_house_custom
+            def_name = ""
+
+    else: # CUSTOM
+        type_name = "Feuille_Custom"
+        user_path = props.path_custom_leaf
+        def_name = ""
+
+    # Résolution intelligente du chemin
+    resolved_path = ""
+    if user_path:
+        cand1 = bpy.path.abspath(user_path)
+        cand2 = os.path.abspath(user_path)
+        cand3 = os.path.join(addon_dir, user_path) if addon_dir else ""
+        for c in [cand1, cand2, cand3]:
+            if c and os.path.exists(c):
+                resolved_path = os.path.abspath(c)
+                break
+
+    if not resolved_path and def_name:
+        fallbacks = []
+        if tex_dir:
+            fallbacks.append(os.path.join(tex_dir, def_name))
+        fallbacks.append(os.path.join(r"C:\Users\authi\AppData\Roaming\Blender Foundation\Blender\5.0\scripts\addons\textures", def_name))
+        fallbacks.append(os.path.join(r"C:\Users\authi\.gemini\antigravity\scratch\Foliage-Alpha-Cutter\textures", def_name))
+        fallbacks.append(os.path.join(r"C:\Users\authi\Downloads", def_name))
+        fallbacks.append(os.path.join(r"C:\Users\authi\Desktop", def_name))
+        for fb in fallbacks:
+            if fb and os.path.exists(fb):
+                resolved_path = os.path.abspath(fb)
+                break
+
+    return type_name, resolved_path
+
 class FoliageBakerProperties(bpy.types.PropertyGroup):
-    # 1. Morphologie & Sélection Type
-    leaf_type: bpy.props.EnumProperty(
-        name="Type de Feuille",
-        description="Choisissez le phénotype botanique à générer",
+    # Dimension de référence standardisée (évite le rétrécissement lors des ré-applications)
+    leaf_base_height: bpy.props.FloatProperty(
+        name="Hauteur Référence (m)",
+        description="Hauteur canonique en mètres de la feuille générée (standardisé à 0.75m)",
+        default=0.75,
+        min=0.05,
+        max=5.0
+    )
+
+    # 1. Famille Végétale (Développable & Extensible)
+    plant_family: bpy.props.EnumProperty(
+        name="Famille Végétale",
+        description="Famille ou catégorie botanique de la feuille",
         items=[
-            ('SATIVA', "🌱 Sativa (9 folioles)", "Folioles longues, fines et effilées (Sativa 9 folioles)"),
-            ('INDICA', "🌿 Indica (7 folioles)", "Folioles larges, denses et couvrantes (Indica 7 folioles)"),
-            ('RUDERALIS', "🌾 Ruderalis (5 folioles)", "Forme compacte, rustique et conique (Ruderalis 5 folioles)"),
+            ('CANNABIS', "🌿 Cannabis", "Famille du chanvre et cannabis (Sativa, Indica, Ruderalis)"),
+            ('GARDEN', "🍅 Potager & Jardin", "Plantes du potager (Tomates : Régulier, Pomme de terre, Rugueux)"),
+            ('TREES', "🌳 Arbres", "Arbres feuillus et d'ornement (Chêne, Érable, etc.)"),
+            ('HOUSEPLANTS', "🪴 Plantes d'intérieur", "Plantes d'intérieur et maison (Monstera, Ficus, etc.)"),
+            ('CUSTOM', "📁 Personnalisée / Import", "Importer n'importe quelle texture de feuille détourée"),
+        ],
+        default='CANNABIS'
+    )
+
+    # 1.1 Variétés Cannabis
+    leaf_type_cannabis: bpy.props.EnumProperty(
+        name="Variété Cannabis",
+        description="Phénotype botanique de cannabis",
+        items=[
+            ('SATIVA', "🌱 Sativa (9 folioles)", "Folioles longues, fines et effilées"),
+            ('INDICA', "🌿 Indica (7 folioles)", "Folioles larges, denses et couvrantes"),
+            ('RUDERALIS', "🌾 Ruderalis (5 folioles)", "Forme compacte, rustique et conique"),
         ],
         default='SATIVA'
     )
 
-    # 3 Inputs pour les fichiers d'images de chaque type
-    path_sativa: bpy.props.StringProperty(
-        name="Image Sativa",
-        description="Chemin de l'image PNG détourée pour Sativa",
-        default=r"C:\Users\authi\Downloads\Sativa.png",
-        subtype='FILE_PATH'
+    # 1.2 Variétés Potager / Jardin (Tomates, solanacées)
+    leaf_type_garden: bpy.props.EnumProperty(
+        name="Morphologie Potager",
+        description="Type de feuillage potager (dans l'ordre de la planche botanique)",
+        items=[
+            ('REGULAR', "🍃 À gauche – Feuillage régulier", "Feuillage régulier standard (à gauche)"),
+            ('POTATO', "🥔 Au milieu – Feuillage pomme de terre", "Feuillage type pomme de terre / Potato Leaf (au milieu)"),
+            ('RUGOSE', "🌿 À droite – Feuillage rugueux ou nain", "Feuillage rugueux plissé ou nain / Rugose Leaf (à droite)"),
+        ],
+        default='REGULAR'
     )
-    path_indica: bpy.props.StringProperty(
-        name="Image Indica",
-        description="Chemin de l'image PNG détourée pour Indica",
-        default=r"C:\Users\authi\Downloads\Indica.png",
-        subtype='FILE_PATH'
+
+    # 1.3 Variétés Arbres
+    leaf_type_trees: bpy.props.EnumProperty(
+        name="Essence d'Arbre",
+        description="Essence forestière ou ornementale",
+        items=[
+            ('OAK', "🍂 Chêne (Quercus)", "Feuille de chêne lobée"),
+            ('MAPLE', "🍁 Érable (Acer)", "Feuille d'érable palmée"),
+            ('CUSTOM_TREE', "📁 Arbre personnalisé...", "Image personnalisée d'arbre"),
+        ],
+        default='OAK'
     )
-    path_ruderalis: bpy.props.StringProperty(
-        name="Image Ruderalis",
-        description="Chemin de l'image PNG détourée pour Ruderalis",
-        default=r"C:\Users\authi\Downloads\Ruderalis.png",
-        subtype='FILE_PATH'
+
+    # 1.4 Variétés Plantes d'Intérieur
+    leaf_type_houseplants: bpy.props.EnumProperty(
+        name="Plante d'Intérieur",
+        description="Plantes décoratives d'intérieur",
+        items=[
+            ('MONSTERA', "🪴 Monstera Deliciosa", "Feuille de monstera fenestrée"),
+            ('FICUS', "🌿 Ficus Elastica", "Feuille de ficus ovale coriace"),
+            ('CUSTOM_HOUSE', "📁 Plante personnalisée...", "Image personnalisée de plante d'intérieur"),
+        ],
+        default='MONSTERA'
     )
+
+    # Panneau dépliant pour les chemins d'accès
+    show_inputs_box: bpy.props.BoolProperty(
+        name="Déplier Chemins d'Images",
+        description="Afficher ou masquer les champs de chemins de fichiers d'images de la famille sélectionnée",
+        default=False
+    )
+
+    # Chemins des images
+    path_sativa: bpy.props.StringProperty(name="Image Sativa", default="textures/Sativa.png", subtype='FILE_PATH')
+    path_indica: bpy.props.StringProperty(name="Image Indica", default="textures/Indica.png", subtype='FILE_PATH')
+    path_ruderalis: bpy.props.StringProperty(name="Image Ruderalis", default="textures/Ruderalis.png", subtype='FILE_PATH')
+
+    path_garden_regular: bpy.props.StringProperty(name="Image Feuillage Régulier", default="textures/Feuillage_Regulier.png", subtype='FILE_PATH')
+    path_garden_potato: bpy.props.StringProperty(name="Image Pomme de Terre", default="textures/Feuillage_Pomme_De_Terre.png", subtype='FILE_PATH')
+    path_garden_rugose: bpy.props.StringProperty(name="Image Feuillage Rugueux", default="textures/Feuillage_Rugueux.png", subtype='FILE_PATH')
+
+    path_tree_oak: bpy.props.StringProperty(name="Image Chêne", default="textures/Chene.png", subtype='FILE_PATH')
+    path_tree_maple: bpy.props.StringProperty(name="Image Érable", default="textures/Erable.png", subtype='FILE_PATH')
+    path_tree_custom: bpy.props.StringProperty(name="Image Arbre Libre", default="", subtype='FILE_PATH')
+
+    path_house_monstera: bpy.props.StringProperty(name="Image Monstera", default="textures/Monstera.png", subtype='FILE_PATH')
+    path_house_ficus: bpy.props.StringProperty(name="Image Ficus", default="", subtype='FILE_PATH')
+    path_house_custom: bpy.props.StringProperty(name="Image Intérieur Libre", default="", subtype='FILE_PATH')
+
+    path_custom_leaf: bpy.props.StringProperty(name="Image Personnalisée", default="", subtype='FILE_PATH')
 
     # 2. Découpe & Topologie Adaptative
     auto_adapt_mesh: bpy.props.BoolProperty(
         name="Adaptation Pixels Auto",
-        description="Détecte automatiquement la surface réelle en pixels et la boîte englobante pour adapter la densité géométrique (évite la sur-géométrie sur les petites variétés comme Ruderalis)",
+        description="Adapte la géométrie à l'emprise réelle en pixels",
         default=True
     )
     margin: bpy.props.IntProperty(
         name="Marge Silhouette (px)",
-        description="Marge de sécurité en pixels autour du limbe (3-4 px recommandé pour ne pas boucher les échancrures entre folioles)",
+        description="Marge de découpe en pixels autour du limbe",
         default=3,
         min=0,
         max=30
     )
     contour_detail: bpy.props.FloatProperty(
         name="Tolérance Contour (px)",
-        description="Tolérance géométrique du contour (plus petit = plus de sommets sur les dents, plus grand = low-poly ultra léger)",
+        description="Tolérance RDP du contour",
         default=4.5,
         min=1.0,
         max=15.0
     )
     interior_subdiv: bpy.props.IntProperty(
         name="Subdivision Intérieure",
-        description="Densité du cadrillage intérieur pour la courbure 3D et le vent (0 = minimal low-poly, 1 = équilibré temps réel UE, 2 = haute fidélité)",
+        description="Subdivision de la surface pour la courbure 3D",
         default=1,
         min=0,
         max=3
@@ -977,39 +1234,11 @@ class FoliageBakerProperties(bpy.types.PropertyGroup):
         description="Équilibre les triangles via Delaunay / Beautify Fill",
         default=True
     )
-    grid_res: bpy.props.IntProperty(
-        name="Résolution Grille",
-        description="Densité initiale de la grille (conservée pour compatibilité)",
-        default=24,
-        min=8,
-        max=60
-    )
-    threshold: bpy.props.FloatProperty(
-        name="Seuil Alpha",
-        description="Seuil de détection de la transparence",
-        default=0.08,
-        min=0.01,
-        max=0.90
-    )
-    v_fold: bpy.props.FloatProperty(
-        name="Creux en V (3D)",
-        description="Profondeur de pliage 3D le long de la nervure principale",
-        default=0.04,
-        min=0.0,
-        max=0.15
-    )
-    droop: bpy.props.FloatProperty(
-        name="Courbure pointe",
-        description="Courbure naturelle vers le bas des extrémités",
-        default=0.05,
-        min=0.0,
-        max=0.15
-    )
-    bake_wind: bpy.props.BoolProperty(
-        name="Vertex Colors (Vent UE)",
-        description="Bake le gradient d'intensité du vent dans les Vertex Colors pour Unreal Engine",
-        default=True
-    )
+    grid_res: bpy.props.IntProperty(name="Résolution Grille", default=24, min=8, max=60)
+    threshold: bpy.props.FloatProperty(name="Seuil Alpha", default=0.08, min=0.01, max=0.90)
+    v_fold: bpy.props.FloatProperty(name="Creux en V (3D)", default=0.04, min=0.0, max=0.15)
+    droop: bpy.props.FloatProperty(name="Courbure pointe", default=0.05, min=0.0, max=0.15)
+    bake_wind: bpy.props.BoolProperty(name="Vertex Colors (Vent UE)", default=True)
 
     # 3. Variété / Phénotype Couleurs
     leaf_phenotype: bpy.props.EnumProperty(
@@ -1018,7 +1247,7 @@ class FoliageBakerProperties(bpy.types.PropertyGroup):
         items=[
             ('CLASSIC', "🍃 Classique (Verte / Dorée)", "Variété verte naturelle avec sénescence dorée"),
             ('PURPLE', "🍇 Violette / Purple (Anthocyanines)", "Teintes sombres violacées avec nervures claires"),
-            ('WHITE', "❄️ Blanche / Frost (Trichomes)", "Givre de trichomes blancs dégradé vers l'arrière"),
+            ('WHITE', "❄️ Blanche / Frost (Trichomes)", "Givre de trichomes blancs dégradé depuis la base (Y-)"),
             ('CUSTOM', "🎨 Personnalisée", "Couleur de variété personnalisée"),
         ],
         default='CLASSIC',
@@ -1026,7 +1255,6 @@ class FoliageBakerProperties(bpy.types.PropertyGroup):
     )
     phenotype_intensity: bpy.props.FloatProperty(
         name="Intensité Variété",
-        description="Dosage de la pigmentation de la variété",
         default=1.0,
         min=0.0,
         max=1.0,
@@ -1035,7 +1263,6 @@ class FoliageBakerProperties(bpy.types.PropertyGroup):
     )
     custom_variety_color: bpy.props.FloatVectorProperty(
         name="Couleur Personnalisée",
-        description="Couleur personnalisée de la variété",
         subtype='COLOR',
         size=4,
         default=(0.35, 0.05, 0.40, 1.0),
@@ -1043,11 +1270,48 @@ class FoliageBakerProperties(bpy.types.PropertyGroup):
         max=1.0,
         update=update_dynamic_leaf_phenotype
     )
+    # Déclencheur et Paramètres Trichomes / Givre (Variété Blanche : 0 à 0.40, fade 0.28 à 0.40)
+    trichome_strength: bpy.props.FloatProperty(
+        name="Force Visuelle (Trichomes)",
+        description="Force visuelle / densité du givre de résine",
+        default=1.0,
+        min=0.0,
+        max=2.5,
+        subtype='FACTOR',
+        update=update_dynamic_leaf_phenotype
+    )
+    trichome_fade_start: bpy.props.FloatProperty(
+        name="Début Fade (Y)",
+        description="Position relative Y (0=base, 1=pointe) où le fondu commence (100% de trichomes en-dessous)",
+        default=0.28,
+        min=0.0,
+        max=0.80,
+        subtype='FACTOR',
+        update=update_dynamic_leaf_phenotype
+    )
+    trichome_fade_end: bpy.props.FloatProperty(
+        name="Fin Fade / Limite (Y)",
+        description="Position relative Y maximale au-delà de laquelle les trichomes sont absents",
+        default=0.40,
+        min=0.05,
+        max=1.0,
+        subtype='FACTOR',
+        update=update_dynamic_leaf_phenotype
+    )
+    trichome_edge_boost: bpy.props.FloatProperty(
+        name="Accentuation Bords Crénelés",
+        description="Renforcement des trichomes sur les dentelures de la marge foliaire dans la zone active",
+        default=0.50,
+        min=0.0,
+        max=2.0,
+        subtype='FACTOR',
+        update=update_dynamic_leaf_phenotype
+    )
 
     # 4. Cycle de Vie Dynamique
     leaf_age: bpy.props.FloatProperty(
         name="Trigger Âge / Cycle de Vie",
-        description="Trigger temps réel : 0.0 = Jeune & saine -> 0.5 = Floraison/Jaune -> 1.0 = Vieille avec bouts noirs brûlés",
+        description="Trigger temps réel (de la pointe Y+ vers le bas Y-) : 0.0 = Jeune saine -> 1.0 = Bouts noirs brûlés",
         default=0.0,
         min=0.0,
         max=1.0,
@@ -1065,13 +1329,12 @@ class FoliageBakerProperties(bpy.types.PropertyGroup):
     normal_strength: bpy.props.FloatProperty(name="Force Relief (Nm)", default=2.2, min=0.1, max=8.0)
     output_dir: bpy.props.StringProperty(
         name="Dossier Textures",
-        description="Dossier d'export des textures PBR",
         default=r"C:\Users\authi\Desktop\Textures_PBR_Chanvre",
         subtype='DIR_PATH'
     )
 
 class MESH_OT_GenerateFoliageByType(bpy.types.Operator):
-    """Génère la feuille 3D selon le type choisi (charge l'image, découpe la silhouette alpha et applique le shader dynamique)"""
+    """Génère la feuille 3D selon la famille et la variété choisies"""
     bl_idname = "mesh.generate_foliage_by_type"
     bl_label = "Générer la Feuille 3D"
     bl_description = "Charge l'image du type sélectionné, crée les vertex détourés selon l'alpha et applique le matériau dynamique"
@@ -1079,38 +1342,12 @@ class MESH_OT_GenerateFoliageByType(bpy.types.Operator):
 
     def execute(self, context):
         props = context.scene.foliage_baker
-        l_type = props.leaf_type
+        type_name, img_path = get_active_leaf_info(props)
 
-        # Récupération du chemin d'image
-        if l_type == 'SATIVA':
-            img_path = bpy.path.abspath(props.path_sativa)
-            type_name = "Sativa"
-        elif l_type == 'INDICA':
-            img_path = bpy.path.abspath(props.path_indica)
-            type_name = "Indica"
-        else:
-            img_path = bpy.path.abspath(props.path_ruderalis)
-            type_name = "Ruderalis"
-
-        # Vérification et secours automatique
-        if not os.path.exists(img_path):
-            addon_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else ""
-            fallbacks = [
-                os.path.join(addon_dir, "textures", f"{type_name}.png"),
-                os.path.join(r"C:\Users\authi\Downloads", f"{type_name}.png"),
-                os.path.join(r"C:\Users\authi\Desktop", f"T_Leaf_{type_name}_Transparent.png"),
-                os.path.join(r"C:\Users\authi\Desktop", f"{type_name}.png")
-            ]
-            for fb in fallbacks:
-                if fb and os.path.exists(fb):
-                    img_path = fb
-                    break
-
-        if not os.path.exists(img_path):
+        if not img_path or not os.path.exists(img_path):
             self.report({'ERROR'}, f"Fichier image introuvable pour {type_name} : {img_path}")
             return {'CANCELLED'}
 
-        # Chargement image dans Blender
         try:
             leaf_img = bpy.data.images.load(img_path, check_existing=True)
             leaf_img.name = f"T_Leaf_{type_name}"
@@ -1122,23 +1359,32 @@ class MESH_OT_GenerateFoliageByType(bpy.types.Operator):
         px = np.array(leaf_img.pixels).reshape((h, w, 4))
         alpha_map = px[:, :, 3]
 
-        # Récupération ou création de l'objet (CORRECTION BUG LINE 1005 : obj assigné AVANT usage)
-        obj_name = "Feuille_Chanvre_3D"
-        obj = bpy.data.objects.get(obj_name)
+        obj_name = f"Feuille_{type_name}_3D"
+        obj = context.active_object if (context.active_object and context.active_object.type == 'MESH') else None
+        if not obj or "Feuille_" not in obj.name:
+            obj = bpy.data.objects.get(obj_name)
         if not obj or obj.type != 'MESH':
             mesh_tmp = bpy.data.meshes.new(obj_name + "_Mesh")
             obj = bpy.data.objects.new(obj_name, mesh_tmp)
             context.scene.collection.objects.link(obj)
+        else:
+            obj.name = obj_name
+            if obj.data:
+                obj.data.name = obj_name + "_Mesh"
 
         context.view_layer.objects.active = obj
         obj.select_set(True)
 
-        # Dimensions adaptées au ratio d'aspect de l'image (0.75m de hauteur standard)
-        dim_y = 0.75
-        dim_x = 0.75 * (w / h)
+        # Standardisation stricte des dimensions (hauteur de référence = props.leaf_base_height)
+        dim_y = float(props.leaf_base_height)
+        dim_x = float(dim_y * (w / h))
 
-        # Matériau dynamique
-        mat_name = "Mat_Leaf_3D"
+        obj["leaf_ref_dim_y"] = float(dim_y)
+        obj["leaf_ref_dim_x"] = float(dim_x)
+        obj["leaf_type_name"] = type_name
+        obj["leaf_family"] = props.plant_family
+
+        mat_name = f"Mat_{type_name}_3D"
         mat = bpy.data.materials.get(mat_name)
         if not mat:
             mat = bpy.data.materials.new(name=mat_name)
@@ -1147,7 +1393,6 @@ class MESH_OT_GenerateFoliageByType(bpy.types.Operator):
         else:
             obj.data.materials[0] = mat
 
-        # Génération du maillage découpé selon le contour exact et adapté aux pixels
         generate_foliage_mesh(
             obj=obj,
             alpha_map=alpha_map,
@@ -1166,23 +1411,20 @@ class MESH_OT_GenerateFoliageByType(bpy.types.Operator):
             grid_res=props.grid_res
         )
 
-        # Configuration du shader dynamique complet pour cette feuille
         setup_dynamic_leaf_shader(mat, base_color_img=leaf_img, type_name=type_name)
-
-        # Synchronisation des états actuels
         update_dynamic_leaf_phenotype(props, context)
         update_dynamic_leaf_age(props, context)
 
         n_verts = len(obj.data.vertices)
         n_faces = len(obj.data.polygons)
-        self.report({'INFO'}, f"Feuille {type_name} 3D générée : {n_verts} sommets ({n_faces} triangles adaptés aux pixels) !")
+        self.report({'INFO'}, f"Feuille {type_name} 3D générée : {n_verts} sommets ({n_faces} triangles) à échelle standard {dim_y}m !")
         return {'FINISHED'}
 
 class MESH_OT_FoliageAlphaCut(bpy.types.Operator):
-    """Recalcule la découpe alpha et l'unsubdivide sur l'objet mesh sélectionné"""
+    """Recalcule la découpe alpha et l'unsubdivide sur l'objet mesh sélectionné sans modifier son échelle"""
     bl_idname = "mesh.foliage_alpha_cut"
     bl_label = "Découper selon l'Alpha"
-    bl_description = "Recalcule la silhouette alpha, la marge, l'unsubdivide et les triangles sur l'objet actif"
+    bl_description = "Recalcule la silhouette alpha, la marge, l'unsubdivide et les triangles en conservant fidèlement l'échelle de l'objet"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
@@ -1197,9 +1439,16 @@ class MESH_OT_FoliageAlphaCut(bpy.types.Operator):
             self.report({'ERROR'}, "Aucune texture image avec canal Alpha trouvée sur cet objet !")
             return {'CANCELLED'}
 
+        w, h = img.size[0], img.size[1]
+        # CORRECTION ANTI-RÉTRÉCISSEMENT : Récupération de la référence absolue sauvegardée
+        ref_dim_y = float(obj.get("leaf_ref_dim_y", props.leaf_base_height))
+        ref_dim_x = float(obj.get("leaf_ref_dim_x", ref_dim_y * (w / h)))
+
         generate_foliage_mesh(
             obj=obj,
             alpha_map=alpha_map,
+            dim_x=ref_dim_x,
+            dim_y=ref_dim_y,
             margin_px=props.margin,
             auto_adapt=props.auto_adapt_mesh,
             contour_detail=props.contour_detail,
@@ -1215,7 +1464,7 @@ class MESH_OT_FoliageAlphaCut(bpy.types.Operator):
 
         n_verts = len(obj.data.vertices)
         n_faces = len(obj.data.polygons)
-        self.report({'INFO'}, f"Découpe mise à jour : {n_verts} sommets ({n_faces} triangles).")
+        self.report({'INFO'}, f"Découpe mise à jour : {n_verts} sommets ({n_faces} triangles) - Échelle {ref_dim_y}m préservée !")
         return {'FINISHED'}
 
 class MESH_OT_SetupDynamicShader(bpy.types.Operator):
@@ -1234,7 +1483,8 @@ class MESH_OT_SetupDynamicShader(bpy.types.Operator):
         props = context.scene.foliage_baker
         mat = obj.data.materials[0]
         src_img = get_source_diffuse_image(obj)
-        setup_dynamic_leaf_shader(mat, base_color_img=src_img, type_name=props.leaf_type.capitalize())
+        type_name = obj.get("leaf_type_name", "Leaf")
+        setup_dynamic_leaf_shader(mat, base_color_img=src_img, type_name=type_name)
         update_dynamic_leaf_phenotype(props, context)
         update_dynamic_leaf_age(props, context)
             
@@ -1274,6 +1524,10 @@ class MESH_OT_BakePBRTextures(bpy.types.Operator):
         self.report({'INFO'}, f"Bake réussi ! Fichiers générés : {names} -> {props.output_dir}")
         return {'FINISHED'}
 
+# ==============================================================================
+# 6. PANNEAU DE L'INTERFACE UTILISATEUR (UI N-PANEL)
+# ==============================================================================
+
 class VIEW3D_PT_FoliageCutterPanel(bpy.types.Panel):
     """Panneau Foliage Cut & Dynamic Shading dans la barre latérale N"""
     bl_label = "Foliage Cut & Dynamic Shading"
@@ -1293,28 +1547,67 @@ class VIEW3D_PT_FoliageCutterPanel(bpy.types.Panel):
         if obj and obj.type == 'MESH':
             n_v = len(obj.data.vertices)
             n_f = len(obj.data.polygons)
+            ref_h = obj.get("leaf_ref_dim_y", obj.dimensions.y)
             box_info.label(text=f"• Nom : {obj.name}")
             box_info.label(text=f"• Sommets : {n_v} | Triangles : {n_f}")
+            box_info.label(text=f"• Échelle standard : {ref_h:.2f} m")
         else:
             box_info.label(text="Aucun mesh sélectionné", icon='INFO')
 
         layout.separator()
 
         # ==========================================
-        # 1. PREMIÈRE ACTION : CHOIX DU TYPE & GÉNÉRATION
+        # 1. CHOIX DE LA FAMILLE, VARIÉTÉ & GÉNÉRATION
         # ==========================================
         box_type = layout.box()
-        box_type.label(text="1. Choix du Type & Génération", icon='FILE_IMAGE')
+        box_type.label(text="1. Famille & Espèce Végétale", icon='OUTLINER_OB_ARMATURE')
         
-        # Sélecteur de type
-        box_type.prop(props, "leaf_type", expand=True)
+        # Sélecteur déroulant de famille
+        box_type.prop(props, "plant_family", text="Famille")
 
-        # 3 Inputs pour les images sources
-        box_inputs = box_type.box()
-        box_inputs.label(text="Inputs Images Sources :", icon='IMPORT')
-        box_inputs.prop(props, "path_sativa", text="🌱 Sativa")
-        box_inputs.prop(props, "path_indica", text="🌿 Indica")
-        box_inputs.prop(props, "path_ruderalis", text="🌾 Ruderalis")
+        # Sous-sélection de variété selon la famille
+        box_leaf = box_type.box()
+        if props.plant_family == 'CANNABIS':
+            box_leaf.label(text="Variétés de Cannabis :", icon='FILE_IMAGE')
+            box_leaf.prop(props, "leaf_type_cannabis", expand=True)
+        elif props.plant_family == 'GARDEN':
+            box_leaf.label(text="Morphologie du Potager :", icon='IMAGE_RGB')
+            box_leaf.prop(props, "leaf_type_garden")
+        elif props.plant_family == 'TREES':
+            box_leaf.label(text="Essences d'Arbres :", icon='OUTLINER_OB_POINTCLOUD')
+            box_leaf.prop(props, "leaf_type_trees")
+        elif props.plant_family == 'HOUSEPLANTS':
+            box_leaf.label(text="Plantes d'Intérieur :", icon='HOME')
+            box_leaf.prop(props, "leaf_type_houseplants")
+        else: # CUSTOM
+            box_leaf.label(text="Import Libre :", icon='FILE_FOLDER')
+            box_leaf.prop(props, "path_custom_leaf", text="Image Alpha")
+
+        # Déplier / Replier les chemins d'images (Inputs)
+        row_toggle = box_type.row()
+        icon_fold = 'DOWNARROW_HLT' if props.show_inputs_box else 'RIGHTARROW'
+        row_toggle.prop(props, "show_inputs_box", text="📁 Déplier Chemins d'Images", icon=icon_fold, toggle=True)
+        
+        if props.show_inputs_box:
+            box_inputs = box_type.box()
+            if props.plant_family == 'CANNABIS':
+                box_inputs.prop(props, "path_sativa", text="🌱 Sativa")
+                box_inputs.prop(props, "path_indica", text="🌿 Indica")
+                box_inputs.prop(props, "path_ruderalis", text="🌾 Ruderalis")
+            elif props.plant_family == 'GARDEN':
+                box_inputs.prop(props, "path_garden_regular", text="🍃 Feuillage régulier")
+                box_inputs.prop(props, "path_garden_potato", text="🥔 Pomme de terre")
+                box_inputs.prop(props, "path_garden_rugose", text="🌿 Rugueux / Nain")
+            elif props.plant_family == 'TREES':
+                box_inputs.prop(props, "path_tree_oak", text="🍂 Chêne")
+                box_inputs.prop(props, "path_tree_maple", text="🍁 Érable")
+                box_inputs.prop(props, "path_tree_custom", text="📁 Arbre Personnalisé")
+            elif props.plant_family == 'HOUSEPLANTS':
+                box_inputs.prop(props, "path_house_monstera", text="🪴 Monstera")
+                box_inputs.prop(props, "path_house_ficus", text="🌿 Ficus")
+                box_inputs.prop(props, "path_house_custom", text="📁 Plante Personnalisée")
+            else:
+                box_inputs.prop(props, "path_custom_leaf", text="📁 Image Alpha")
 
         # Bouton principal de génération
         col_gen = box_type.column(align=True)
@@ -1330,6 +1623,7 @@ class VIEW3D_PT_FoliageCutterPanel(bpy.types.Panel):
         box_mesh.label(text="2. Découpe & Topologie Adaptative", icon='MOD_DECIM')
 
         col_topo = box_mesh.column(align=True)
+        col_topo.prop(props, "leaf_base_height", text="Hauteur Référence (m)")
         col_topo.prop(props, "auto_adapt_mesh", text="Adaptation Pixels Auto", icon='AUTO')
         col_topo.prop(props, "margin", text="Marge Silhouette (px)")
         col_topo.prop(props, "contour_detail", text="Tolérance Contour (px)")
@@ -1358,7 +1652,14 @@ class VIEW3D_PT_FoliageCutterPanel(bpy.types.Panel):
         elif props.leaf_phenotype == 'PURPLE':
             box_var.label(text="🍇 Sombre violacé aux veines claires", icon='INFO')
         elif props.leaf_phenotype == 'WHITE':
-            box_var.label(text="❄️ Givre de résine blanche dégradé vers l'arrière", icon='FREEZE')
+            box_var.label(text="❄️ Givre de résine blanche dégradé depuis la fleur (Y-)", icon='FREEZE')
+            box_tri = box_var.box()
+            box_tri.label(text="Trigger Trichomes / Givre (Bas Y: 0.0 à 0.40) :", icon='BRUSH_DATA')
+            box_tri.prop(props, "trichome_strength", slider=True, text="Force Visuelle")
+            row_fade = box_tri.row(align=True)
+            row_fade.prop(props, "trichome_fade_start", slider=True, text="Début Fade (0.28)")
+            row_fade.prop(props, "trichome_fade_end", slider=True, text="Fin Fade / Limite (0.40)")
+            box_tri.prop(props, "trichome_edge_boost", slider=True, text="Accentuation Bords")
 
         layout.separator()
 
@@ -1374,9 +1675,13 @@ class VIEW3D_PT_FoliageCutterPanel(bpy.types.Panel):
         if props.leaf_age < 0.25:
             box_slider.label(text="🌱 Jeune & Saine (Fini mat velouté)", icon='CHECKMARK')
         elif props.leaf_age < 0.70:
-            box_slider.label(text="🌿 Floraison (Chlorose dorée)", icon='FILE_IMAGE')
+            box_slider.label(text="🌿 Floraison (Chlorose dorée depuis la pointe Y+)", icon='FILE_IMAGE')
         else:
-            box_slider.label(text="🍁 Récolte (Bouts noirs brûlés, taches rouille)", icon='ERROR')
+            box_slider.label(text="🍁 Récolte (Bouts noirs brûlés en Y+, rouille)", icon='ERROR')
+
+        if props.leaf_phenotype == 'WHITE':
+            box_slider.separator()
+            box_slider.prop(props, "trichome_strength", slider=True, text="Trigger Givre / Trichomes", icon='FREEZE')
 
         col_init = box_dyn.column(align=True)
         col_init.operator("mesh.setup_dynamic_shader", text="Réinitialiser Nœuds Shader", icon='NODE')
@@ -1409,6 +1714,10 @@ class VIEW3D_PT_FoliageCutterPanel(bpy.types.Panel):
         col_bake = box_pbr.column(align=True)
         col_bake.scale_y = 1.3
         col_bake.operator("mesh.bake_pbr_textures", text="Bake Textures de l'État Actuel", icon='TEXTURE')
+
+# ==============================================================================
+# 7. ENREGISTREMENT DE L'ADD-ON
+# ==============================================================================
 
 classes = (
     FoliageBakerProperties,
