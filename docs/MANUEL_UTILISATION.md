@@ -8,13 +8,14 @@ Bienvenue dans le manuel d'utilisation de **Foliage Alpha Silhouette Cutter**, u
 
 1. [Installation & Activation](#1-installation--activation)
 2. [Interface & Emplacement](#2-interface--emplacement)
-3. [Étape 1 : Choix du Phénotype & Textures](#3-étape-1--choix-du-phénotype--textures)
-4. [Étape 2 : Découpe Silhouette & Topologie Adaptative](#4-étape-2--découpe-silhouette--topologie-adaptative)
-5. [Étape 3 : Variétés & Pigmentations](#5-étape-3--variétés--pigmentations)
-6. [Étape 4 : Trigger Dynamique de Sénescence (Cycle de Vie)](#6-étape-4--trigger-dynamique-de-sénescence-cycle-de-vie)
-7. [Étape 5 : Poids du Vent pour Unreal Engine (Vertex Colors)](#7-étape-5--poids-du-vent-pour-unreal-engine-vertex-colors)
-8. [Étape 6 : Baking PBR & Exportation de Textures](#8-étape-6--baking-pbr--exportation-de-textures)
-9. [Astuces & Bonnes Pratiques](#9-astuces--bonnes-pratiques)
+3. [Atlas Botanique des 10 Espèces Intégrées](#-atlas-botanique-complet-des-10-espèces-intégrées)
+4. [Étape 1 : Choix de la Famille & Textures](#3-étape-1--choix-de-la-famille-variété--textures)
+5. [Étape 2 : Découpe Silhouette & Topologie Adaptative](#4-étape-2--découpe-silhouette--topologie-adaptative)
+6. [Étape 3 : Variétés & Pigmentations](#5-étape-3--variétés--pigmentations)
+7. [Étape 4 : Trigger Dynamique de Sénescence (Cycle de Vie)](#6-étape-4--trigger-dynamique-de-sénescence-cycle-de-vie)
+8. [Étape 5 : Poids du Vent pour Unreal Engine (Vertex Colors)](#7-étape-5--poids-du-vent-pour-unreal-engine-vertex-colors)
+9. [Étape 6 : Baking PBR & Exportation de Textures](#8-étape-6--baking-pbr--exportation-de-textures)
+10. [Astuces & Bonnes Pratiques](#9-astuces--bonnes-pratiques)
 
 ---
 
@@ -52,24 +53,55 @@ Le panneau est structuré en **5 sections numérotées** correspondant au workfl
 
 ---
 
+## 🌿 Atlas Botanique Complet des 10 Espèces Intégrées
+
+L'add-on intègre désormais un catalogue de **10 morphologies végétales photoréalistes** prêtes à l'emploi réparties en **4 grandes familles botaniques** :
+
+![Atlas Botanique Complet](images/foliage_atlas_all_species.png)
+
+### Tableau Récapitulatif des Espèces & Cartes PBR
+
+| Famille | Variété | Morphologie & Caractéristiques | Résolution | Cartes PBR Incluses |
+| :--- | :--- | :--- | :--- | :--- |
+| **🌿 Cannabis** | **Sativa** | 9 Folioles allongées, effilées et dentées | 694 × 738 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🌿 Cannabis** | **Indica** | 7 Folioles larges, denses, fort recouvrement | 694 × 738 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🌿 Cannabis** | **Ruderalis** | 5 Folioles compactes, forme rustique | 694 × 738 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🍅 Potager** | **Feuillage Régulier** | À gauche – Découpé et dentelé classique (Tomate) | 694 × 738 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🍅 Potager** | **Pomme de Terre** | Au milieu – Limbe large et lisse (*Potato Leaf*) | 694 × 738 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🍅 Potager** | **Feuillage Rugueux** | À droite – Limbe gaufré plissé ou nain (*Rugose Leaf*) | 694 × 738 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🌳 Arbres** | **Chêne Robur** | Limbe pennatifide à lobes arrondis (*Quercus*) | 1024 × 1024 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🌳 Arbres** | **Érable Palmier** | Limbe palmé à 5 lobes aigus (*Acer*) | 1024 × 1024 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🪴 Intérieur** | **Monstera Deliciosa** | Limbe géant fenestré (fentes & trous naturels découpés) | 1024 × 1024 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+| **🪴 Intérieur** | **Ficus Elastica** | Limbe ovale coriace avec nervure centrale marquée | 1024 × 1024 px | `BaseColor`, `TipMask`, `Veins`, `Roughness` |
+
+> **📁 Export Automatique 4K :** L'ensemble des 40 textures PBR (BaseColor, TipMask, Veins, Roughness pour chaque variété) est pré-calculé et disponible en miroir dans `C:\Users\authi\Desktop\Textures_PBR_Chanvre`.
+
+---
+
 ## 3. Étape 1 : Choix de la Famille, Variété & Textures
 
-L'add-on intègre désormais une architecture multi-familles botaniques développable et extensible :
+L'add-on intègre une architecture multi-familles botaniques développable et extensible :
 
-### 1. 🌿 Famille Cannabis
-- **🌱 Sativa (9 folioles)** : Limbe élancé, folioles très fines, longues et effilées. Idéal pour les variétés tropicales.
+### 1. 🌿 Famille Cannabis & Chanvre
+- **🌱 Sativa (9 folioles)** : Limbe élancé, folioles très fines, longues et effilées. Idéal pour les variétés sativa pures.
 - **🌿 Indica (7 folioles)** : Folioles larges, trapues et couvrantes, se chevauchant légèrement.
 - **🌾 Ruderalis (5 folioles)** : Silhouette compacte, folioles robustes et courtes.
 
-### 2. 🍅 Potager & Jardin (Ex: Solanacées / Tomates)
-- **🍃 Feuillage régulier** : Feuilles classiques profondément découpées.
-- **🥔 Pomme de terre (*Potato Leaf*)** : Folioles larges, ovales et entières sans dentelures profondes.
-- **🌿 Rugueux / Nain (*Rugose Leaf*)** : Feuilles gaufrées, épaisses et très nervurées.
+### 2. 🍅 Potager & Jardin (Solanacées / Tomates)
+- **🍃 À gauche – Feuillage régulier** : Feuilles classiques profondément découpées et dentelées.
+- **🥔 Au milieu – Pomme de terre (*Potato Leaf*)** : Folioles larges, ovales et entières sans dentelures profondes.
+- **🌿 À droite – Feuillage rugueux ou nain (*Rugose Leaf*)** : Feuilles gaufrées plissées, épaisses et très nervurées.
 
-### 3. 🌳 Arbres & 🪴 Plantes d'intérieur
-- **🍂 Chêne & 🍁 Érable** : Morphologies de feuilles d'arbres caducs.
-- **🪴 Monstera & 🌿 Ficus** : Feuilles de plantes d'ornement et d'intérieur.
-- **📁 Personnalisée / Import Libre** : Permet d'importer n'importe quelle texture PNG avec canal alpha.
+### 3. 🌳 Arbres & Essences Forestières
+- **🍂 Chêne Robur (*Quercus*)** : Feuille lobée classique aux sinus arrondis et nervure pennée.
+- **🍁 Érable Palmier (*Acer*)** : Feuille palmée à nervures rayonnantes et bords finement dentés.
+
+### 4. 🪴 Plantes d'Intérieur & Décoration
+- **🪴 Monstera Deliciosa** : Feuille tropicale fenestrée avec fentes latérales et découpes de perforations.
+- **🌿 Ficus Elastica** : Feuille ovale coriace au limbe lisse et nervure centrale proéminente.
+
+### 5. 📁 Personnalisée / Import Libre
+- Permet d'importer n'importe quelle texture PNG avec canal alpha (fleurs, herbes folles, autres arbres).
 
 ### Configuration des Chemins d'Images (Inputs Dépliables) :
 - Cliquez sur `📁 Déplier Chemins d'Images` pour spécifier vos propres fichiers ou textures personnalisées.

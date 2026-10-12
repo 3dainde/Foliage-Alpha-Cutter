@@ -1060,7 +1060,7 @@ def get_active_leaf_info(props):
         elif sub == 'FICUS':
             type_name = "Ficus"
             user_path = props.path_house_ficus
-            def_name = ""
+            def_name = "Ficus.png"
         else:
             type_name = "Plante_Custom"
             user_path = props.path_house_custom
@@ -1190,7 +1190,7 @@ class FoliageBakerProperties(bpy.types.PropertyGroup):
     path_tree_custom: bpy.props.StringProperty(name="Image Arbre Libre", default="", subtype='FILE_PATH')
 
     path_house_monstera: bpy.props.StringProperty(name="Image Monstera", default="textures/Monstera.png", subtype='FILE_PATH')
-    path_house_ficus: bpy.props.StringProperty(name="Image Ficus", default="", subtype='FILE_PATH')
+    path_house_ficus: bpy.props.StringProperty(name="Image Ficus", default="textures/Ficus.png", subtype='FILE_PATH')
     path_house_custom: bpy.props.StringProperty(name="Image Intérieur Libre", default="", subtype='FILE_PATH')
 
     path_custom_leaf: bpy.props.StringProperty(name="Image Personnalisée", default="", subtype='FILE_PATH')

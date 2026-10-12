@@ -9,7 +9,13 @@ Un add-on professionnel pour **Blender (4.2+ / 5.0)** conçu pour transformer de
 
 ---
 
-Aperçu & Galerie
+## 🌿 Atlas Botanique des 10 Espèces Intégrées
+
+![Atlas Botanique](docs/images/foliage_atlas_all_species.png)
+
+---
+
+## Aperçu & Galerie
 
 | Phénotypes Botaniques (Sativa, Indica, Ruderalis) | Courbure 3D & Triangles Équilibrés |
 | :---: | :---: |
@@ -21,13 +27,25 @@ Aperçu & Galerie
 
 ---
 
-Fonctionnalités Principales
+## Fonctionnalités Principales
 
-1.  Sélecteur de Phénotypes Botaniques
-- **Sativa (9 folioles)** : Folioles longues, élancées et effilées.
-- **Indica (7 folioles)** : Folioles larges, denses et couvrantes.
-- **Ruderalis (5 folioles)** : Silhouette compacte et rustique.
-- Chargement automatique des textures transparentes et adaptation instantanée du ratio d'aspect.
+### 1. 🌿 Architecture Multi-Familles Botaniques (10 Variétés Incluses)
+- **🌿 Famille Cannabis & Chanvre** :
+  - **Sativa (9 folioles)** : Folioles longues, élancées et effilées.
+  - **Indica (7 folioles)** : Folioles larges, denses et couvrantes.
+  - **Ruderalis (5 folioles)** : Silhouette compacte, forme naine rustique.
+- **🍅 Potager & Jardin (Solanacées / Tomates)** :
+  - **Feuillage Régulier** : À gauche – Découpé et denté classique.
+  - **Feuillage Pomme de Terre (*Potato Leaf*)** : Au milieu – Limbe large et lisse.
+  - **Feuillage Rugueux (*Rugose Leaf*)** : À droite – Gaufré plissé ou nain.
+- **🌳 Arbres & Essences Forestières** :
+  - **Chêne Robur (*Quercus*)** : Limbe pennatifide à lobes arrondis.
+  - **Érable Palmier (*Acer*)** : Limbe palmé à 5 lobes aigus.
+- **🪴 Plantes d'Intérieur & Décoration** :
+  - **Monstera Deliciosa** : Limbe fenestré géant (fentes et perforations découpées).
+  - **Ficus Elastica** : Limbe ovale coriace avec nervure médiane saillante.
+- **📁 Personnalisée / Import Libre** : Découpage immédiat de toute texture PNG détourée.
+- **Garantie Anti-Rétrécissement** : Hauteur de référence préservée à chaque recalcul.
 
 2.  Découpe Silhouette & Topologie Adaptative aux Pixels
 - **Algorithme Moore-Neighbor Tracing** pour une extraction de bordure sub-pixel sans artefact.
