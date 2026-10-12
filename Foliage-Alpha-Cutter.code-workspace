@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"name": "Foliage-Alpha-Cutter",
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"**/.git": true,
+			"**/__pycache__": true,
+			"**/*.blend1": true
+		}
+	}
+}
