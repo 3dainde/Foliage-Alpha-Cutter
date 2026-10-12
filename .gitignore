@@ -1,0 +1,31 @@
+# Blender autosave & backup files
+*.blend1
+*.blend2
+*.blend@
+*.blend@@
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Blender baked textures output
+Output_PBR/
+*.bake.png
+*.tmp
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
