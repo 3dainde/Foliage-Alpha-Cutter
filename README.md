@@ -1,4 +1,4 @@
-# 🌿 Foliage Alpha Silhouette Cutter & Dynamic PBR Baker
+Foliage Alpha Silhouette Cutter & Dynamic PBR Baker
 
 [![Blender Version](https://img.shields.io/badge/Blender-4.2%20%7C%205.0-orange.svg?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -9,7 +9,7 @@ Un add-on professionnel pour **Blender (4.2+ / 5.0)** conçu pour transformer de
 
 ---
 
-## 📸 Aperçu & Galerie
+Aperçu & Galerie
 
 | Phénotypes Botaniques (Sativa, Indica, Ruderalis) | Courbure 3D & Triangles Équilibrés |
 | :---: | :---: |
@@ -21,25 +21,25 @@ Un add-on professionnel pour **Blender (4.2+ / 5.0)** conçu pour transformer de
 
 ---
 
-## ✨ Fonctionnalités Principales
+Fonctionnalités Principales
 
-### 1. 🧬 Sélecteur de Phénotypes Botaniques
+1.  Sélecteur de Phénotypes Botaniques
 - **Sativa (9 folioles)** : Folioles longues, élancées et effilées.
 - **Indica (7 folioles)** : Folioles larges, denses et couvrantes.
 - **Ruderalis (5 folioles)** : Silhouette compacte et rustique.
 - Chargement automatique des textures transparentes et adaptation instantanée du ratio d'aspect.
 
-### 2. ✂️ Découpe Silhouette & Topologie Adaptative aux Pixels
+2.  Découpe Silhouette & Topologie Adaptative aux Pixels
 - **Algorithme Moore-Neighbor Tracing** pour une extraction de bordure sub-pixel sans artefact.
 - **Simplification Ramer-Douglas-Peucker (RDP) Adaptative** : la tolérance $\varepsilon$ est calibrée en fonction de la surface réelle en pixels, évitant la surcharge géométrique sur les petites variétés (Ruderalis) tout en préservant chaque dentelure sur les grandes feuilles.
 - **Triangulation Delaunay & Beautify Fill** : maillage sans faces étirées, prêt pour le low-poly de production.
 - **Vertex Reducer (Décimation)** : contrôle précis du budget de sommets pour les LODs de jeux vidéo.
 
-### 3. 🍃 Courbure 3D & Gradient de Vent pour Unreal Engine
+3.  Courbure 3D & Gradient de Vent pour Unreal Engine
 - Pli en V le long de la nervure principale ($V_{\text{fold}}$) et courbure apicale gravitaire ($D_{\text{roop}}$).
 - **Vertex Colors `WindWeight`** : gradient de flexion peint automatiquement sur les sommets pour les shaders de vent UE5 (`SimpleGrassWind` / `Pivot Painter`).
 
-### 4. 🍂 Shading Procédural & Cycle de Vie Dynamique
+4.  Shading Procédural & Cycle de Vie Dynamique
 - **Curseur de Sénescence / Âge (0.0 à 1.0)** :
   - `0.00` : Feuille jeune veloutée (fini mat soyeux).
   - `0.50` : Chlorose progressive (jaunissement marginal).
@@ -49,7 +49,7 @@ Un add-on professionnel pour **Blender (4.2+ / 5.0)** conçu pour transformer de
   - **❄️ Blanche / Frost** : Cristallisation de résine blanche dégradée vers la base du limbe.
   - **🎨 Personnalisée** : Sélecteur de teinte libre.
 
-### 5. 🎨 Moteur de Bake PBR & Packing ORM (UE5)
+5. Moteur de Bake PBR & Packing ORM (UE5)
 - Bake en un clic sans configuration fastidieuse :
   - **Colour (Col)** : Albedo haute fidélité avec état de maturité figé.
   - **Normal Map (Nm)** : Carte d'espace tangent dérivée du relief des nervures.
@@ -60,7 +60,7 @@ Un add-on professionnel pour **Blender (4.2+ / 5.0)** conçu pour transformer de
 
 ---
 
-## 🚀 Installation Rapide
+Installation Rapide
 
 1. Téléchargez le fichier [`foliage_alpha_cutter.py`](foliage_alpha_cutter.py) ou clonez ce dépôt :
    ```bash
@@ -74,19 +74,19 @@ Un add-on professionnel pour **Blender (4.2+ / 5.0)** conçu pour transformer de
 
 ---
 
-## 📚 Documentation Complète
+Documentation Complète
 
 Pour des explications approfondies, consultez les guides dédiés dans le dossier [`docs/`](docs/) :
 
-- 📖 **[Manuel d'Utilisation Détaillé](docs/MANUEL_UTILISATION.md)** : Guide pas-à-pas illustré de toutes les fonctionnalités, panneaux et paramètres.
-- 🔬 **[Documentation Technique](docs/DOCUMENTATION_TECHNIQUE.md)** : Algorithmes mathématiques (Moore-Neighbor, RDP adaptatif, Delaunay, courbures 3D, shader graph, bake PBR).
-- 🚀 **[Feuille de Route & Spécifications des TODOs](docs/ROADMAP_TODO.md)** : Conception détaillée des prochaines étapes :
+- **[Manuel d'Utilisation Détaillé](docs/MANUEL_UTILISATION.md)** : Guide pas-à-pas illustré de toutes les fonctionnalités, panneaux et paramètres.
+- **[Documentation Technique](docs/DOCUMENTATION_TECHNIQUE.md)** : Algorithmes mathématiques (Moore-Neighbor, RDP adaptatif, Delaunay, courbures 3D, shader graph, bake PBR).
+- **[Feuille de Route & Spécifications des TODOs](docs/ROADMAP_TODO.md)** : Conception détaillée des prochaines étapes :
   1. **Ajout de la queue de la feuille (Pétiole 3D procédural)**.
   2. **Création volumétrique de la fleur de cannabis (Bud / Tête florale)**.
 
 ---
 
-## 📂 Structure du Dépôt
+Structure du Dépôt
 
 ```
 Foliage-Alpha-Cutter/
@@ -107,7 +107,7 @@ Foliage-Alpha-Cutter/
 
 ---
 
-## 🛠️ Feuille de Route (TODOs)
+Feuille de Route (TODOs)
 
 - [x] Découpe automatique du contour alpha (Moore-Neighbor).
 - [x] Adaptation dynamique de la densité de maillage aux pixels réels.
@@ -124,7 +124,7 @@ Consultez le document [`docs/ROADMAP_TODO.md`](docs/ROADMAP_TODO.md) pour les d�
 
 ---
 
-## 📄 Licence & Crédits
+Licence & Crédits
 
 Ce projet est sous licence **MIT** - voir le fichier [LICENSE](LICENSE) pour plus de détails.  
 Créé et maintenu par **[3dainde](https://github.com/3dainde)**.
