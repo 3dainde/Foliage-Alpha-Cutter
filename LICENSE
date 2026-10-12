@@ -1,21 +1,48 @@
-MIT License
+PROPRIETARY LICENSE — TOUS DROITS RÉSERVÉS (ALL RIGHTS RESERVED)
 
-Copyright (c) 2026 3dainde
+Copyright (c) 2026 3DAINDE. Tous droits réservés / All Rights Reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+================================================================================
+CONDITIONS GÉNÉRALES DE PROTECTION ET D'UTILISATION
+================================================================================
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Le présent logiciel ("Foliage Alpha Silhouette Cutter & Dynamic PBR Baker"), incluant
+sans limitation l'ensemble de son code source, ses algorithmes, son architecture de
+shading, ses textures, masques et assets visuels, ainsi que l'ensemble de sa documentation
+(collectivement désignés sous le terme le "Logiciel"), est la propriété intellectuelle
+exclusive et confidentielle de 3DAINDE.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Le projet est placé sous un régime de protection juridique stricte afin de garantir
+l'intégrité de l'innovation et des droits d'auteur jusqu'à son achèvement complet.
+
+1. INTERDICTION DE COPIE ET DE REDISTRIBUTION
+   Toute reproduction, copie, duplication, distribution, diffusion publique,
+   sous-licence, prêt, location ou mise à disposition de tiers du Logiciel (ou de toute
+   partie substantielle de son code ou de ses assets) sous quelque forme que ce soit,
+   est STRICTEMENT INTERDITE sans autorisation écrite expresse et préalable de 3DAINDE.
+
+2. USAGE COMMERCIAL INTERDIT
+   Aucune utilisation à des fins commerciales, directes ou indirectes, aucune intégration
+   dans des logiciels tiers payants, ni aucune vente ou revente de textures, maillages
+   ou shaders issus de ce Logiciel n'est permise sans accord contractuel formel.
+
+3. INTERDICTION DES FORKS ET ŒUVRES DÉRIVÉES
+   Il est formellement interdit de créer des versions dérivées, des clones, des forks
+   publics ou privés redistribués, ou d'extraire des sous-parties de la propriété
+   intellectuelle sans consentement exprès.
+
+4. DÉCISION FUTURE DES DROITS ET D'EXPLOITATION
+   3DAINDE se réserve l'exclusivité pleine et entière de statuer ultérieurement sur les
+   modalités de diffusion, de distribution publique, d'octroi de licences ou de
+   commercialisation du Logiciel à la fin du cycle de développement.
+
+================================================================================
+ENGLISH SUMMARY:
+================================================================================
+This software, including all source code, algorithms, procedural shader graphs,
+textures, masks, 3D meshes, and documentation, is the exclusive proprietary
+property of 3DAINDE. 
+
+All rights are strictly reserved. No part of this software may be copied, modified,
+distributed, sublicensed, reverse-engineered, or used for commercial purposes without
+explicit prior written authorization from 3DAINDE.

@@ -3,7 +3,7 @@ Foliage Alpha Silhouette Cutter & Dynamic PBR Baker
 [![Blender Version](https://img.shields.io/badge/Blender-4.2%20%7C%205.0-orange.svg?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Target Engine](https://img.shields.io/badge/Unreal%20Engine-5.x%20Ready-black.svg?logo=unrealengine&logoColor=white)](https://www.unrealengine.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Proprietary%20%7C%20All%20Rights%20Reserved-red.svg)](LICENSE)
 
 Un add-on professionnel pour **Blender (4.2+ / 5.0)** conçu pour transformer des images de feuillage détourées (textures alpha) en maillages 3D ultra-optimisés, avec adaptation de la topologie aux pixels, shaders de sénescence interactifs, poids de vent intégrés et export de textures PBR pour **Unreal Engine 5** et **Unity**.
 
@@ -109,18 +109,15 @@ Structure du Dépôt
 ```
 Foliage-Alpha-Cutter/
 ├── foliage_alpha_cutter.py     # Add-on Blender principal (code source unique)
-├── LICENSE                     # Licence open-source MIT
+├── LICENSE                     # Licence Propriétaire — Tous droits réservés (Protection stricte)
 ├── README.md                   # Ce fichier de présentation
 ├── .gitignore                  # Fichiers ignorés par Git
-├── textures/                   # Textures transparentes de référence incluses
-│   ├── Sativa.png              # Texture Sativa détourée
-│   ├── Indica.png              # Texture Indica détourée
-│   └── Ruderalis.png           # Texture Ruderalis détourée
+├── textures/                   # Textures transparentes de référence incluses (10 espèces)
 └── docs/                       # Documentation exhaustive
     ├── MANUEL_UTILISATION.md   # Guide d'utilisation complet
     ├── DOCUMENTATION_TECHNIQUE.md # Architecture et algorithmes mathématiques
     ├── ROADMAP_TODO.md         # Spécifications du Pétiole et de la Fleur 3D
-    └── images/                 # Rendu et captures d'écran de démonstration
+    └── images/                 # Atlas botanique et captures de démonstration
 ```
 
 ---
@@ -142,7 +139,10 @@ Consultez le document [`docs/ROADMAP_TODO.md`](docs/ROADMAP_TODO.md) pour les d�
 
 ---
 
-Licence & Crédits
+Licence & Protection Intellectuelle
 
-Ce projet est sous licence **MIT** - voir le fichier [LICENSE](LICENSE) pour plus de détails.  
+Ce projet est sous **Licence Propriétaire — Tous droits réservés** (*All Rights Reserved*).  
+Toute reproduction, copie, modification, distribution, sous-licence ou exploitation commerciale du code source, des shaders ou des assets est **strictement interdite** sans autorisation écrite expresse préalable de l'auteur.  
+Pour plus de détails, consultez le fichier [LICENSE](LICENSE).  
+
 Créé et maintenu par **[3dainde](https://github.com/3dainde)**.
